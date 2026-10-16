@@ -11,3 +11,6 @@
 .cxx/
 *.jks
 *.keystore
+
+# Arbeitskopien von Hilfsagenten
+.claude/worktrees/
