@@ -99,6 +99,7 @@ fun RecordScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val guide by viewModel.guide.collectAsStateWithLifecycle()
+    val guideReady by viewModel.guideReady.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var confirmLeave by rememberSaveable { mutableStateOf(false) }
@@ -165,6 +166,7 @@ fun RecordScreen(
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
+        if (!guideReady) return@Scaffold
         Column(
             Modifier
                 .fillMaxSize()

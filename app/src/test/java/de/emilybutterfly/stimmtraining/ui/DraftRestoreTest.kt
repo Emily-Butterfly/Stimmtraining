@@ -74,6 +74,29 @@ class DraftRestoreTest {
     }
 
     @Test
+    fun exercisePrefillIsNoDraftAlsoAfterRestore() {
+        val twang = app.container.techniques.technique("twang")!!
+        val exercise = twang.exercises.first()
+        val handle = SavedStateHandle(
+            mapOf(RecordViewModel.ARG_TECHNIQUE to twang.id, RecordViewModel.ARG_EXERCISE to exercise.id),
+        )
+        val first = RecordViewModel(app, app.container, handle)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (first.state.value.params.exercise.isBlank() && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(10)
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(twang.recordingLabel(exercise), first.state.value.params.exercise)
+        assertFalse("unverändertes Formular ist kein Entwurf", first.state.value.hasDraft)
+
+        // Android beendet die App; dieselben gesicherten Werte kommen in ein neues ViewModel.
+        val restored = RecordViewModel(app, app.container, handle).state.value
+        assertEquals(twang.recordingLabel(exercise), restored.params.exercise)
+        assertFalse("auch nach dem Wiederherstellen kein Entwurf", restored.hasDraft)
+    }
+
+    @Test
     fun missingDraftFilesAreIgnored() {
         val handle = SavedStateHandle()
         handle[RecordViewModel.KEY_AUDIO] = "/nicht/vorhanden.m4a"

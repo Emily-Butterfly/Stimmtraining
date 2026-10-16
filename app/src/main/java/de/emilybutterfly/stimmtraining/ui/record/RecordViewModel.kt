@@ -75,6 +75,13 @@ class RecordViewModel(
     private val _guide = MutableStateFlow<ExerciseGuide?>(null)
     val guide: StateFlow<ExerciseGuide?> = _guide.asStateFlow()
 
+    /**
+     * Erst wenn feststeht, ob es eine Anleitung gibt, wird der Inhalt gezeigt. Sonst würde
+     * die nachträglich eingefügte Anleitung eine wiederhergestellte Scrollposition verschieben.
+     */
+    private val _guideReady = MutableStateFlow(savedState.get<String>(ARG_TECHNIQUE) == null)
+    val guideReady: StateFlow<Boolean> = _guideReady.asStateFlow()
+
     private var recordingFile: File? = null
     private var accumulatedMs = 0L
     private var segmentStartedAt = 0L
@@ -92,13 +99,18 @@ class RecordViewModel(
     /** Lädt die Übung, mit der die Aufnahme gestartet wurde, und trägt sie ins Formular ein. */
     private fun loadGuide() {
         val techniqueId = savedState.get<String>(ARG_TECHNIQUE) ?: return
-        val exerciseId = savedState.get<String>(ARG_EXERCISE) ?: return
+        val exerciseId = savedState.get<String>(ARG_EXERCISE)
         viewModelScope.launch {
             val technique = withContext(Dispatchers.IO) { runCatching { container.techniques }.getOrNull() }
                 ?.technique(techniqueId)
-            val exercise = technique?.exercise(exerciseId) ?: return@launch
+            val exercise = exerciseId?.let { technique?.exercise(it) }
+            if (technique == null || exercise == null) {
+                _guideReady.value = true
+                return@launch
+            }
             val guide = ExerciseGuide(technique.recordingLabel(exercise), exercise)
             _guide.value = guide
+            _guideReady.value = true
             if (!hadSavedParams) {
                 _state.update {
                     if (it.params.exercise.isNotBlank()) {
@@ -114,6 +126,7 @@ class RecordViewModel(
 
     private data class Persistable(
         val params: RecordingParams,
+        val initialParams: RecordingParams,
         val photo: String?,
         val audio: String?,
         val recordedAt: Long?,
@@ -124,6 +137,7 @@ class RecordViewModel(
         val done = state.phase == RecorderPhase.Done
         return Persistable(
             params = state.params,
+            initialParams = state.initialParams,
             photo = state.photo?.absolutePath,
             audio = if (done) state.audio?.absolutePath else null,
             recordedAt = if (done) state.recordedAt else null,
@@ -133,6 +147,7 @@ class RecordViewModel(
 
     private fun persist(p: Persistable) {
         savedState.putParams(KEY_PARAMS, p.params)
+        savedState.putParams(KEY_INITIAL_PARAMS, p.initialParams)
         savedState[KEY_PHOTO] = p.photo
         savedState[KEY_AUDIO] = p.audio
         savedState[KEY_RECORDED_AT] = p.recordedAt
@@ -141,12 +156,14 @@ class RecordViewModel(
 
     private fun restore(): RecordUiState {
         val params = savedState.getParams(KEY_PARAMS)
+        val initialParams = savedState.getParams(KEY_INITIAL_PARAMS)
         val photo = savedState.get<String>(KEY_PHOTO)?.let(::File)?.takeIf { it.isFile }
         val audio = savedState.get<String>(KEY_AUDIO)?.let(::File)?.takeIf { it.isFile && it.length() > 0 }
-            ?: return RecordUiState(params = params, photo = photo)
+            ?: return RecordUiState(params = params, photo = photo, initialParams = initialParams)
         val duration = savedState[KEY_DURATION] ?: 0L
         return RecordUiState(
             params = params,
+            initialParams = initialParams,
             photo = photo,
             phase = RecorderPhase.Done,
             audio = audio,
@@ -357,6 +374,7 @@ class RecordViewModel(
 
     companion object {
         internal const val KEY_PARAMS = "params"
+        internal const val KEY_INITIAL_PARAMS = "initialParams"
 
         /** Navigationsargumente, wenn die Aufnahme aus einer Übung heraus gestartet wird. */
         const val ARG_TECHNIQUE = "technique"

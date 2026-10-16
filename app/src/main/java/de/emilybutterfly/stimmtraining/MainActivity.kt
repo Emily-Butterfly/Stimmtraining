@@ -82,8 +82,10 @@ private fun AppNavigation() {
                 onClose = { navController.fromCurrent(entry) { popBackStack() } },
                 onSaved = { id ->
                     navController.fromCurrent(entry) {
+                        // Nur die Aufnahme ersetzen: Zurück führt dorthin, wo sie gestartet wurde
+                        // (Liste oder Übung).
                         navigate("detail/$id") {
-                            popUpTo("list")
+                            popUpTo(entry.destination.id) { inclusive = true }
                         }
                     }
                 },
