@@ -1,5 +1,6 @@
 package de.emilybutterfly.stimmtraining
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,9 @@ import de.emilybutterfly.stimmtraining.ui.backup.BackupScreen
 import de.emilybutterfly.stimmtraining.ui.detail.DetailScreen
 import de.emilybutterfly.stimmtraining.ui.list.RecordingListScreen
 import de.emilybutterfly.stimmtraining.ui.record.RecordScreen
+import de.emilybutterfly.stimmtraining.ui.record.RecordViewModel
+import de.emilybutterfly.stimmtraining.ui.techniques.TechniqueDetailScreen
+import de.emilybutterfly.stimmtraining.ui.techniques.TechniquesScreen
 import de.emilybutterfly.stimmtraining.ui.theme.StimmtrainingTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,9 +59,25 @@ private fun AppNavigation() {
                 onNewRecording = { navController.fromCurrent(entry) { navigate("record") } },
                 onOpenRecording = { id -> navController.fromCurrent(entry) { navigate("detail/$id") } },
                 onOpenBackup = { navController.fromCurrent(entry) { navigate("backup") } },
+                onOpenTechniques = { navController.fromCurrent(entry) { navigate("techniques") } },
             )
         }
-        composable("record") { entry ->
+        composable(
+            route = "record?${RecordViewModel.ARG_TECHNIQUE}={${RecordViewModel.ARG_TECHNIQUE}}" +
+                "&${RecordViewModel.ARG_EXERCISE}={${RecordViewModel.ARG_EXERCISE}}",
+            arguments = listOf(
+                navArgument(RecordViewModel.ARG_TECHNIQUE) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument(RecordViewModel.ARG_EXERCISE) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { entry ->
             RecordScreen(
                 onClose = { navController.fromCurrent(entry) { popBackStack() } },
                 onSaved = { id ->
@@ -80,6 +100,26 @@ private fun AppNavigation() {
         }
         composable("backup") { entry ->
             BackupScreen(onClose = { navController.fromCurrent(entry) { popBackStack() } })
+        }
+        composable("techniques") { entry ->
+            TechniquesScreen(
+                onClose = { navController.fromCurrent(entry) { popBackStack() } },
+                onOpenTechnique = { id -> navController.fromCurrent(entry) { navigate("technique/${Uri.encode(id)}") } },
+            )
+        }
+        composable("technique/{id}") { entry ->
+            TechniqueDetailScreen(
+                techniqueId = entry.arguments?.getString("id").orEmpty(),
+                onClose = { navController.fromCurrent(entry) { popBackStack() } },
+                onRecordExercise = { technique, exercise ->
+                    navController.fromCurrent(entry) {
+                        navigate(
+                            "record?${RecordViewModel.ARG_TECHNIQUE}=${Uri.encode(technique)}" +
+                                "&${RecordViewModel.ARG_EXERCISE}=${Uri.encode(exercise)}",
+                        )
+                    }
+                },
+            )
         }
     }
 }

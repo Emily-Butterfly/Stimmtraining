@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import de.emilybutterfly.stimmtraining.AppContainer
 import de.emilybutterfly.stimmtraining.audio.AudioRecorder
+import de.emilybutterfly.stimmtraining.data.Exercise
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.ui.app
 import de.emilybutterfly.stimmtraining.ui.getParams
@@ -49,12 +50,17 @@ data class RecordUiState(
     val durationMs: Long = 0,
     val saving: Boolean = false,
     val message: String? = null,
+    /** Ausgangswerte des Formulars, z. B. mit vorausgefüllter Übung. */
+    val initialParams: RecordingParams = RecordingParams(),
 ) {
     val isRecording: Boolean get() = phase == RecorderPhase.Recording || phase == RecorderPhase.Paused
 
     val hasDraft: Boolean
-        get() = photo != null || phase != RecorderPhase.Idle || params != RecordingParams()
+        get() = photo != null || phase != RecorderPhase.Idle || params != initialParams
 }
+
+/** Die Übung aus „Techniken & Übungen“, mit der diese Aufnahme gestartet wurde. */
+data class ExerciseGuide(val label: String, val exercise: Exercise)
 
 class RecordViewModel(
     private val app: Application,
@@ -62,8 +68,12 @@ class RecordViewModel(
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
     private val recorder = AudioRecorder(app)
+    private val hadSavedParams = savedState.contains("$KEY_PARAMS.title")
     private val _state = MutableStateFlow(restore())
     val state: StateFlow<RecordUiState> = _state.asStateFlow()
+
+    private val _guide = MutableStateFlow<ExerciseGuide?>(null)
+    val guide: StateFlow<ExerciseGuide?> = _guide.asStateFlow()
 
     private var recordingFile: File? = null
     private var accumulatedMs = 0L
@@ -75,6 +85,30 @@ class RecordViewModel(
         // (z. B. während die Kamera-App offen ist).
         viewModelScope.launch {
             _state.map(::persistable).distinctUntilChanged().collect(::persist)
+        }
+        loadGuide()
+    }
+
+    /** Lädt die Übung, mit der die Aufnahme gestartet wurde, und trägt sie ins Formular ein. */
+    private fun loadGuide() {
+        val techniqueId = savedState.get<String>(ARG_TECHNIQUE) ?: return
+        val exerciseId = savedState.get<String>(ARG_EXERCISE) ?: return
+        viewModelScope.launch {
+            val technique = withContext(Dispatchers.IO) { runCatching { container.techniques }.getOrNull() }
+                ?.technique(techniqueId)
+            val exercise = technique?.exercise(exerciseId) ?: return@launch
+            val guide = ExerciseGuide(technique.recordingLabel(exercise), exercise)
+            _guide.value = guide
+            if (!hadSavedParams) {
+                _state.update {
+                    if (it.params.exercise.isNotBlank()) {
+                        it
+                    } else {
+                        val params = it.params.copy(exercise = guide.label)
+                        it.copy(params = params, initialParams = params)
+                    }
+                }
+            }
         }
     }
 
@@ -323,6 +357,10 @@ class RecordViewModel(
 
     companion object {
         internal const val KEY_PARAMS = "params"
+
+        /** Navigationsargumente, wenn die Aufnahme aus einer Übung heraus gestartet wird. */
+        const val ARG_TECHNIQUE = "technique"
+        const val ARG_EXERCISE = "exercise"
         internal const val KEY_PHOTO = "photo"
         internal const val KEY_AUDIO = "audio"
         internal const val KEY_RECORDED_AT = "recordedAt"

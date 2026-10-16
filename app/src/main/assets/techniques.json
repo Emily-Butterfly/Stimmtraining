@@ -1,0 +1,28 @@
+{
+  "techniques": [
+    {
+      "id": "twang",
+      "title": "Twang",
+      "subtitle": "Platzhalter",
+      "focus": true,
+      "intro": "Platzhalter.",
+      "why": "Platzhalter.",
+      "howToFind": ["Platzhalter"],
+      "examples": ["nja-nja-nja"],
+      "exercises": [
+        {
+          "id": "hexenlachen",
+          "title": "Hexenlachen",
+          "goal": "Platzhalter",
+          "duration": "2–3 Minuten",
+          "steps": ["Schritt 1", "Schritt 2"],
+          "examples": ["hihihi"],
+          "checks": ["Kein Druck im Hals"]
+        }
+      ],
+      "pitfalls": ["Platzhalter"],
+      "safety": ["Platzhalter"]
+    }
+  ],
+  "sources": [{ "title": "Platzhalter", "url": "https://example.org" }]
+}

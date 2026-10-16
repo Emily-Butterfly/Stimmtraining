@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -83,6 +87,7 @@ fun RecordingListScreen(
     onNewRecording: () -> Unit,
     onOpenRecording: (Long) -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenTechniques: () -> Unit,
     viewModel: RecordingListViewModel = viewModel(factory = RecordingListViewModel.Factory),
 ) {
     val recordings by viewModel.recordings.collectAsStateWithLifecycle()
@@ -92,6 +97,9 @@ fun RecordingListScreen(
             TopAppBar(
                 title = { Text("Stimmtraining") },
                 actions = {
+                    IconButton(onClick = onOpenTechniques) {
+                        Icon(Icons.Outlined.School, contentDescription = "Techniken & Übungen")
+                    }
                     IconButton(onClick = onOpenBackup) {
                         Icon(Icons.Outlined.Backup, contentDescription = "Backup")
                     }
@@ -111,7 +119,7 @@ fun RecordingListScreen(
             list == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-            list.isEmpty() -> EmptyState(Modifier.fillMaxSize().padding(padding))
+            list.isEmpty() -> EmptyState(onOpenTechniques, Modifier.fillMaxSize().padding(padding))
             else -> RecordingList(
                 recordings = list,
                 photoFile = viewModel::photoFile,
@@ -245,7 +253,7 @@ private fun WarmUpBadge(warmedUp: Boolean) {
 }
 
 @Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
+private fun EmptyState(onOpenTechniques: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier.padding(32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
@@ -264,5 +272,10 @@ private fun EmptyState(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+        TextButton(onClick = onOpenTechniques) {
+            Icon(Icons.Outlined.School, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Techniken & Übungen ansehen")
+        }
     }
 }

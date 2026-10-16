@@ -1,17 +1,20 @@
 package de.emilybutterfly.stimmtraining.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
 import de.emilybutterfly.stimmtraining.MainActivity
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.rules.ExternalResource
 import org.junit.Test
@@ -69,6 +72,30 @@ class AppSmokeTest {
         text("Änderungen speichern").performScrollTo().assertExists()
         compose.onNodeWithContentDescription("Abbrechen").performClick()
         compose.onNodeWithContentDescription("Teilen").assertIsDisplayed()
+    }
+
+    @Test
+    fun exerciseCanBeRecordedFromTechniques() {
+        val content = ApplicationProvider.getApplicationContext<StimmtrainingApp>().container.techniques
+        val twang = content.technique("twang")!!
+        val firstExercise = twang.exercises.first()
+
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Noch keine Aufnahmen") }
+        compose.onNodeWithContentDescription("Techniken & Übungen").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists(twang.title) }
+        text("Schwerpunkt").assertExists()
+        text(twang.title).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Warum es hilft") }
+        // Die Liste ist lazy: erst zur ersten Übung scrollen.
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(firstExercise.title))
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Mit dieser Übung aufnehmen"))
+        compose.onAllNodes(hasText("Mit dieser Übung aufnehmen"), true)[0].performClick()
+
+        // Die Aufnahme zeigt die Anleitung und hat die Übung schon eingetragen.
+        val label = twang.recordingLabel(firstExercise)
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists(label) }
+        compose.onAllNodes(hasText(label), true).fetchSemanticsNodes().let { assertEquals(2, it.size) }
+        text("Tippen, um die Aufnahme zu starten").assertExists()
     }
 
     /** Sucht auch Texte innerhalb anklickbarer Karten und Buttons. */

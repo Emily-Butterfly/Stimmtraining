@@ -35,6 +35,7 @@ import de.emilybutterfly.stimmtraining.data.RecordingParams
 
 val EXERCISE_SUGGESTIONS = listOf(
     "Text lesen",
+    "Twang",
     "Spontan sprechen",
     "Resonanz",
     "Tonhöhe",

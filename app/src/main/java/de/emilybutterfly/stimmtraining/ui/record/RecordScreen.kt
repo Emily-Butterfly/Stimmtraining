@@ -9,6 +9,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -36,12 +37,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -83,6 +88,7 @@ import de.emilybutterfly.stimmtraining.ui.components.ParameterForm
 import de.emilybutterfly.stimmtraining.ui.components.PhotoSection
 import de.emilybutterfly.stimmtraining.ui.components.formatDateTime
 import de.emilybutterfly.stimmtraining.ui.components.formatDuration
+import de.emilybutterfly.stimmtraining.ui.techniques.ExerciseDetails
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,6 +98,7 @@ fun RecordScreen(
     viewModel: RecordViewModel = viewModel(factory = RecordViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val guide by viewModel.guide.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var confirmLeave by rememberSaveable { mutableStateOf(false) }
@@ -168,6 +175,7 @@ fun RecordScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            guide?.let { GuideCard(it) }
             PhotoSection(
                 photo = state.photo,
                 busy = state.photoBusy,
@@ -326,6 +334,35 @@ private fun RecorderPanel(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Die Anleitung der gewählten Übung, damit sie beim Aufnehmen sichtbar ist. */
+@Composable
+private fun GuideCard(guide: ExerciseGuide) {
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = Modifier.fillMaxWidth().animateContentSize(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Übung", style = MaterialTheme.typography.labelMedium)
+                    Text(guide.label, style = MaterialTheme.typography.titleMedium)
+                }
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (expanded) "Anleitung ausblenden" else "Anleitung anzeigen",
+                    )
+                }
+            }
+            if (expanded) {
+                Text(guide.exercise.goal, style = MaterialTheme.typography.bodyMedium)
+                ExerciseDetails(guide.exercise)
             }
         }
     }

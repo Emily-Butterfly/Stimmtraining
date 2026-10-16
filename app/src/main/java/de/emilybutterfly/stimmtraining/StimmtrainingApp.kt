@@ -8,6 +8,8 @@ import de.emilybutterfly.stimmtraining.backup.BackupSettings
 import de.emilybutterfly.stimmtraining.data.AppDatabase
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
+import de.emilybutterfly.stimmtraining.data.TechniqueContent
+import de.emilybutterfly.stimmtraining.data.TechniqueLibrary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,6 +26,7 @@ class StimmtrainingApp : Application() {
 
 /** Einfache manuelle Dependency Injection für die ganze App. */
 class AppContainer(context: Context) {
+    private val appContext = context.applicationContext
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val database = AppDatabase.build(context)
     val files = FileStore(context)
@@ -31,4 +34,7 @@ class AppContainer(context: Context) {
     val backupManager = BackupManager(context, database.recordingDao(), files)
     val backupSettings = BackupSettings(context)
     val autoBackup = AutoBackup(context, backupManager, database.recordingDao(), backupSettings)
+
+    /** Inhalte von „Techniken & Übungen“; beim ersten Zugriff aus den Assets gelesen. */
+    val techniques: TechniqueContent by lazy { TechniqueLibrary.load(appContext) }
 }
