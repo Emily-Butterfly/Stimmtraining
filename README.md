@@ -47,24 +47,30 @@ Jeder Push baut die App automatisch mit GitHub Actions.
 ### Updates ohne Datenverlust (einmalig einrichten)
 
 Android installiert ein Update nur, wenn es mit demselben Schlüssel signiert ist wie die
-installierte Version. Damit das klappt, braucht GitHub einen festen Schlüssel:
+installierte Version. Der Schlüssel liegt verschlüsselt im Repository
+(`signing/stimmtraining.jks.enc`, AES-256); GitHub braucht nur das Passwort dazu:
 
 1. Im Repository *Settings → Secrets and variables → Actions → New repository secret*.
-2. Name: `STIMM_KEYSTORE_BASE64`, Wert: der Base64-Text der Keystore-Datei.
-3. Optional ein eigenes Passwort als `STIMM_KEYSTORE_PASSWORD` (Standard: `stimmtraining`).
+2. Name: `STIMM_KEYSTORE_KEY`, Wert: das Passwort (24 Zeichen in vier Sechsergruppen).
 
-Den Keystore selbst erzeugen (Alias muss `stimmtraining` sein, Store- und Key-Passwort gleich):
+Leerzeichen oder Zeilenumbrüche, die beim Kopieren hineingeraten, werden ignoriert. Im Log des
+Builds und in den Release-Notizen steht, ob mit dem festen Schlüssel signiert wurde (mit
+SHA-256-Fingerabdruck) oder mit einem Übergangsschlüssel.
+
+Alternativ kann der ganze Keystore als Base64 im Secret `STIMM_KEYSTORE_BASE64` stehen
+(Alias `stimmtraining`, Store- und Key-Passwort gleich, Standard `stimmtraining`, sonst als
+`STIMM_KEYSTORE_PASSWORD`). Eigenen Schlüssel erzeugen:
 
 ```sh
 keytool -genkeypair -keystore stimmtraining.jks -storetype PKCS12 -alias stimmtraining \
   -keyalg RSA -keysize 4096 -validity 36500 -storepass stimmtraining -keypass stimmtraining \
   -dname "CN=Stimmtraining"
-base64 -w0 stimmtraining.jks   # Ausgabe als Secret eintragen
+base64 -w0 stimmtraining.jks   # Ausgabe als Secret STIMM_KEYSTORE_BASE64 eintragen
 ```
 
-Den Keystore gut aufheben und niemals ins Repository legen. Ohne das Secret ist jede APK anders
-signiert; dann vor einem Update in der App ein Backup erstellen, die alte Version deinstallieren,
-die neue installieren und das Backup wiederherstellen.
+Ohne gültigen Schlüssel baut GitHub trotzdem eine APK, aber mit einem Übergangsschlüssel. Eine
+spätere Version mit festem Schlüssel lässt sich dann nur nach Deinstallation installieren:
+vorher in der App ein Backup erstellen, danach wiederherstellen.
 
 ## Entwickeln
 

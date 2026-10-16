@@ -22,25 +22,45 @@ jobs:
 
       - name: Signatur-Schlüssel bereitstellen
         env:
+          KEYSTORE_KEY: ${{ secrets.STIMM_KEYSTORE_KEY }}
           KEYSTORE_BASE64: ${{ secrets.STIMM_KEYSTORE_BASE64 }}
           STIMM_KEYSTORE_PASSWORD: ${{ secrets.STIMM_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            KEYSTORE="$RUNNER_TEMP/stimmtraining.jks"
-            PASSWORD="${STIMM_KEYSTORE_PASSWORD:-stimmtraining}"
-            # Nur Base64-Zeichen übernehmen: Beim Kopieren (z. B. auf dem Handy) schleichen sich
-            # leicht Leerzeichen, Zeilenumbrüche oder unsichtbare Zeichen ein.
-            if ! printf '%s' "$KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$KEYSTORE" 2> /dev/null \
-              || ! keytool -list -keystore "$KEYSTORE" -storepass "$PASSWORD" -alias stimmtraining > /dev/null 2>&1; then
-              echo "::error title=Signatur-Schlüssel unlesbar::Das Secret STIMM_KEYSTORE_BASE64 ergibt keinen gültigen Schlüssel (Alias stimmtraining). Bitte den Wert vollständig neu eintragen (siehe README)."
-              exit 1
+          KEYSTORE="$RUNNER_TEMP/stimmtraining.jks"
+          PASSWORD="${STIMM_KEYSTORE_PASSWORD:-stimmtraining}"
+          valid() { keytool -list -keystore "$KEYSTORE" -storepass "$PASSWORD" -alias stimmtraining > /dev/null 2>&1; }
+          SOURCE=""
+          # 1. Verschlüsselter Schlüssel im Repository, entschlüsselt mit dem kurzen Secret.
+          #    Beim Kopieren (z. B. auf dem Handy) eingeschleppte Leer- und Sonderzeichen werden entfernt.
+          if [ -n "$KEYSTORE_KEY" ] && [ -f signing/stimmtraining.jks.enc ]; then
+            KEY="$(printf '%s' "$KEYSTORE_KEY" | tr -cd 'A-Za-z0-9-')"
+            if KEY="$KEY" openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+                -in signing/stimmtraining.jks.enc -out "$KEYSTORE" -pass env:KEY 2> /dev/null && valid; then
+              SOURCE="STIMM_KEYSTORE_KEY"
+            else
+              echo "::warning title=STIMM_KEYSTORE_KEY passt nicht::Mit diesem Secret lässt sich signing/stimmtraining.jks.enc nicht entschlüsseln. Bitte das Passwort neu eintragen (siehe README)."
             fi
-            echo "Signatur-Zertifikat:"
-            keytool -list -v -keystore "$KEYSTORE" -storepass "$PASSWORD" -alias stimmtraining | grep -m1 "SHA256:"
-            echo "STIMM_KEYSTORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
-          else
-            echo "::warning title=Kein fester Signatur-Schlüssel::Ohne das Secret STIMM_KEYSTORE_BASE64 hat jede APK einen anderen Schlüssel. Updates gehen dann nur nach Deinstallation (vorher Backup machen!). Siehe README."
           fi
+          # 2. Alternativ der ganze Keystore als Base64-Secret.
+          if [ -z "$SOURCE" ] && [ -n "$KEYSTORE_BASE64" ]; then
+            if printf '%s' "$KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$KEYSTORE" 2> /dev/null && valid; then
+              SOURCE="STIMM_KEYSTORE_BASE64"
+            else
+              echo "::warning title=STIMM_KEYSTORE_BASE64 unlesbar::Das Secret ergibt keinen gültigen Schlüssel (Alias stimmtraining). Einfacher ist STIMM_KEYSTORE_KEY (siehe README)."
+            fi
+          fi
+          if [ -n "$SOURCE" ]; then
+            FINGERPRINT="$(keytool -list -v -keystore "$KEYSTORE" -storepass "$PASSWORD" -alias stimmtraining | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' || true)"
+            echo "Signatur-Zertifikat aus $SOURCE: $FINGERPRINT"
+            echo "STIMM_KEYSTORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
+            NOTE="Signiert mit dem festen Schlüssel (SHA-256 $FINGERPRINT). Spätere Versionen lassen sich darüber als Update installieren."
+          else
+            rm -f "$KEYSTORE"
+            echo "::warning title=Übergangsschlüssel::Kein fester Signatur-Schlüssel verfügbar. Diese APK hat einen zufälligen Schlüssel; Updates gehen dann nur nach Deinstallation (vorher Backup machen!). Siehe README."
+            NOTE="Achtung: Diese Version hat einen Übergangsschlüssel. Eine spätere Version mit festem Schlüssel lässt sich nur nach Deinstallation installieren – vorher in der App ein Backup erstellen."
+          fi
+          echo "SIGNING_NOTE=$NOTE" >> "$GITHUB_ENV"
+          echo "$NOTE" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Tests ausführen und APK bauen
         env:
@@ -69,5 +89,5 @@ jobs:
             gh release create "$TAG" Stimmtraining-*.apk \
               --target "${{ github.sha }}" \
               --title "Stimmtraining 1.0.${{ github.run_number }}" \
-              --notes "Zum Installieren die APK auf dem Handy herunterladen und öffnen. Vor einem Update mit neuem Signatur-Schlüssel bitte zuerst in der App ein Backup erstellen."
+              --notes "Zum Installieren die APK auf dem Handy herunterladen und öffnen. $SIGNING_NOTE"
           fi
