@@ -23,10 +23,21 @@ jobs:
       - name: Signatur-Schlüssel bereitstellen
         env:
           KEYSTORE_BASE64: ${{ secrets.STIMM_KEYSTORE_BASE64 }}
+          STIMM_KEYSTORE_PASSWORD: ${{ secrets.STIMM_KEYSTORE_PASSWORD }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/stimmtraining.jks"
-            echo "STIMM_KEYSTORE_FILE=$RUNNER_TEMP/stimmtraining.jks" >> "$GITHUB_ENV"
+            KEYSTORE="$RUNNER_TEMP/stimmtraining.jks"
+            PASSWORD="${STIMM_KEYSTORE_PASSWORD:-stimmtraining}"
+            # Nur Base64-Zeichen übernehmen: Beim Kopieren (z. B. auf dem Handy) schleichen sich
+            # leicht Leerzeichen, Zeilenumbrüche oder unsichtbare Zeichen ein.
+            if ! printf '%s' "$KEYSTORE_BASE64" | tr -cd 'A-Za-z0-9+/=' | base64 --decode > "$KEYSTORE" 2> /dev/null \
+              || ! keytool -list -keystore "$KEYSTORE" -storepass "$PASSWORD" -alias stimmtraining > /dev/null 2>&1; then
+              echo "::error title=Signatur-Schlüssel unlesbar::Das Secret STIMM_KEYSTORE_BASE64 ergibt keinen gültigen Schlüssel (Alias stimmtraining). Bitte den Wert vollständig neu eintragen (siehe README)."
+              exit 1
+            fi
+            echo "Signatur-Zertifikat:"
+            keytool -list -v -keystore "$KEYSTORE" -storepass "$PASSWORD" -alias stimmtraining | grep -m1 "SHA256:"
+            echo "STIMM_KEYSTORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
           else
             echo "::warning title=Kein fester Signatur-Schlüssel::Ohne das Secret STIMM_KEYSTORE_BASE64 hat jede APK einen anderen Schlüssel. Updates gehen dann nur nach Deinstallation (vorher Backup machen!). Siehe README."
           fi
