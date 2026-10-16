@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.School
@@ -53,6 +54,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
+import de.emilybutterfly.stimmtraining.analysis.Notes
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
 import de.emilybutterfly.stimmtraining.data.TextAttachment
@@ -225,6 +227,7 @@ private fun RecordingCard(recording: Recording, attachment: TextAttachment?, onC
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     WarmUpBadge(recording.warmedUp)
+                    recording.pitchMostFrequent?.let { NoteBadge(it) }
                     recording.selfRating?.let { RatingDisplay(it, iconSize = 14.dp) }
                 }
             }
@@ -249,6 +252,25 @@ private fun WarmUpBadge(warmedUp: Boolean) {
                 if (warmedUp) "aufgewärmt" else "nicht aufgewärmt",
                 style = MaterialTheme.typography.labelSmall,
             )
+        }
+    }
+}
+
+/** Die häufigste Note der Aufnahme, wenn die Tonhöhe analysiert wurde. */
+@Composable
+private fun NoteBadge(midi: Int) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Icon(Icons.Filled.MusicNote, contentDescription = "Häufigste Note", modifier = Modifier.size(14.dp))
+            Text(Notes.name(midi), style = MaterialTheme.typography.labelSmall)
         }
     }
 }

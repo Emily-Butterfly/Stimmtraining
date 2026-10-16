@@ -221,6 +221,7 @@ fun RecordScreen(
                 onCameraResult = viewModel::onCameraPhoto,
                 onPhotoPicked = viewModel::onPhotoPicked,
                 onDocumentPicked = viewModel::onDocumentPicked,
+                onTextPasted = viewModel::onTextPasted,
                 onRemove = viewModel::removeAttachment,
                 onExpand = { readingMode = true },
                 onOpenExternally = { document -> viewModel.openExternally(document) { context.startActivity(it) } },

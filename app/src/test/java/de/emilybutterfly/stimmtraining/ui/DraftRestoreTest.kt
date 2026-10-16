@@ -144,6 +144,25 @@ class DraftRestoreTest {
     }
 
     @Test
+    fun pastedTextBecomesADocumentNamedAfterItsFirstLine() {
+        val handle = SavedStateHandle()
+        val viewModel = RecordViewModel(app, app.container, handle)
+        viewModel.onTextPasted("Der Nordwind und die Sonne\nEinst stritten sich …", name = null)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (viewModel.state.value.attachment == null && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(10)
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+        val document = viewModel.state.value.attachment as TextAttachment.Document
+        assertEquals("Der Nordwind und die Sonne", document.name)
+        assertEquals("Der Nordwind und die Sonne\nEinst stritten sich …", document.file.readText())
+
+        // Übersteht das Beenden der App wie jeder Entwurf.
+        assertEquals(document, RecordViewModel(app, app.container, handle).state.value.attachment)
+    }
+
+    @Test
     fun missingDraftFilesAreIgnored() {
         val handle = SavedStateHandle()
         handle[RecordViewModel.KEY_AUDIO] = "/nicht/vorhanden.m4a"

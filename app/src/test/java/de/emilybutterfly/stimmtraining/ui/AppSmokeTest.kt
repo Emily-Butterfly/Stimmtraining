@@ -1,17 +1,22 @@
 package de.emilybutterfly.stimmtraining.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
 import de.emilybutterfly.stimmtraining.MainActivity
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
+import de.emilybutterfly.stimmtraining.analysis.PitchResult
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import kotlinx.coroutines.runBlocking
@@ -68,11 +73,41 @@ class AppSmokeTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Nordwind") }
         text("aufgewärmt").assertExists()
         text("Nordwind").performClick()
+        text("Tonhöhe analysieren").performScrollTo().assertExists()
         text("Ja, 10 Minuten").performScrollTo().assertExists()
         compose.onNodeWithContentDescription("Bearbeiten").performClick()
         text("Änderungen speichern").performScrollTo().assertExists()
         compose.onNodeWithContentDescription("Abbrechen").performClick()
         compose.onNodeWithContentDescription("Teilen").assertIsDisplayed()
+    }
+
+    @Test
+    fun textCanBePastedForReading() {
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Noch keine Aufnahmen") }
+        text("Neue Aufnahme").performClick()
+        text("Einfügen").performScrollTo().performClick()
+        text("Aus Zwischenablage einfügen").assertExists()
+        compose.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextInput("Der Nordwind und die Sonne\nEinst stritten sich die beiden.")
+        text("Übernehmen").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Einst stritten sich die beiden.", substring = true) }
+        text("Bearbeiten").performScrollTo().assertExists()
+    }
+
+    @Test
+    fun analysedRecordingShowsItsNotes() {
+        val container = ApplicationProvider.getApplicationContext<StimmtrainingApp>().container
+        runBlocking {
+            val audio = container.files.newDraftFile("m4a").apply { writeBytes(ByteArray(10)) }
+            val id = container.repository.create(audio, null, System.currentTimeMillis(), 30_000, RecordingParams(title = "Tonleiter"))
+            container.repository.savePitch(id, PitchResult(mostFrequent = 57, lowest = 52, highest = 62, voicedMs = 12_000))
+        }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Tonleiter") }
+        text("A3").assertExists() // häufigste Note in der Liste
+        text("Tonleiter").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Häufigste") }
+        text("E3").assertExists()
+        text("D4").assertExists()
+        text("220 Hz").assertExists()
     }
 
     @Test
@@ -99,7 +134,7 @@ class AppSmokeTest {
         text("In anderer App öffnen").assertExists()
 
         // Groß anzeigen öffnet die Leseansicht.
-        compose.onNodeWithContentDescription("Groß anzeigen").performClick()
+        compose.onNodeWithContentDescription("Groß anzeigen").performScrollTo().performClick()
         compose.onNodeWithContentDescription("Schließen").assertIsDisplayed()
     }
 

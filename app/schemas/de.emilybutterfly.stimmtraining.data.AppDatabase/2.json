@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 2,
-    "identityHash": "e6419c2b54ff758d5adfb4e5d36dc568",
+    "identityHash": "4ab05c6e5c9c9eff22c16ac276ba6b71",
     "entities": [
       {
         "tableName": "recordings",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL, `recordedAt` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `audioFile` TEXT NOT NULL, `photoFile` TEXT, `documentFile` TEXT, `documentName` TEXT, `title` TEXT NOT NULL, `exercise` TEXT NOT NULL, `warmedUp` INTEGER NOT NULL, `warmUpMinutes` INTEGER, `voiceCondition` INTEGER, `selfRating` INTEGER, `notes` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL, `recordedAt` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `audioFile` TEXT NOT NULL, `photoFile` TEXT, `documentFile` TEXT, `documentName` TEXT, `pitchMostFrequent` INTEGER, `pitchLowest` INTEGER, `pitchHighest` INTEGER, `pitchVoicedMs` INTEGER, `title` TEXT NOT NULL, `exercise` TEXT NOT NULL, `warmedUp` INTEGER NOT NULL, `warmUpMinutes` INTEGER, `voiceCondition` INTEGER, `selfRating` INTEGER, `notes` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -52,6 +52,26 @@
             "fieldPath": "documentName",
             "columnName": "documentName",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pitchMostFrequent",
+            "columnName": "pitchMostFrequent",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pitchLowest",
+            "columnName": "pitchLowest",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pitchHighest",
+            "columnName": "pitchHighest",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pitchVoicedMs",
+            "columnName": "pitchVoicedMs",
+            "affinity": "INTEGER"
           },
           {
             "fieldPath": "title",
@@ -120,7 +140,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e6419c2b54ff758d5adfb4e5d36dc568')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4ab05c6e5c9c9eff22c16ac276ba6b71')"
     ]
   }
 }

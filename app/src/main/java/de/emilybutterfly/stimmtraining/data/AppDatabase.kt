@@ -14,11 +14,15 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         const val NAME = "stimmtraining.db"
 
-        /** Version 2: Text als Datei (PDF, Word, …) statt als Foto. */
+        /** Version 2: Text als Datei (PDF, Word, …) statt als Foto; Tonhöhen-Analyse. */
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE recordings ADD COLUMN documentFile TEXT")
                 db.execSQL("ALTER TABLE recordings ADD COLUMN documentName TEXT")
+                db.execSQL("ALTER TABLE recordings ADD COLUMN pitchMostFrequent INTEGER")
+                db.execSQL("ALTER TABLE recordings ADD COLUMN pitchLowest INTEGER")
+                db.execSQL("ALTER TABLE recordings ADD COLUMN pitchHighest INTEGER")
+                db.execSQL("ALTER TABLE recordings ADD COLUMN pitchVoicedMs INTEGER")
             }
         }
 

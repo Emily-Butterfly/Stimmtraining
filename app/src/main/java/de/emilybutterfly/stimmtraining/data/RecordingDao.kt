@@ -31,6 +31,12 @@ interface RecordingDao {
     @Query("SELECT COUNT(*) || ':' || IFNULL(MAX(updatedAt), 0) || ':' || IFNULL(SUM(id), 0) FROM recordings")
     suspend fun fingerprint(): String
 
+    @Query(
+        "UPDATE recordings SET pitchMostFrequent = :mostFrequent, pitchLowest = :lowest, pitchHighest = :highest, " +
+            "pitchVoicedMs = :voicedMs, updatedAt = :updatedAt WHERE id = :id",
+    )
+    suspend fun updatePitch(id: Long, mostFrequent: Int?, lowest: Int?, highest: Int?, voicedMs: Long, updatedAt: Long)
+
     @Insert
     suspend fun insert(recording: Recording): Long
 

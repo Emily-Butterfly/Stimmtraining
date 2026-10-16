@@ -17,6 +17,7 @@ import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.app
+import de.emilybutterfly.stimmtraining.ui.createDraftText
 import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
 import de.emilybutterfly.stimmtraining.ui.importDraftDocument
@@ -216,6 +217,11 @@ class RecordViewModel(
     fun onPhotoPicked(uri: Uri) = importAttachment(isPhoto = true) { TextAttachment.Photo(container.files.importDraftPhoto(app, uri)) }
 
     fun onDocumentPicked(uri: Uri) = importAttachment(isPhoto = false) { container.files.importDraftDocument(app, uri) }
+
+    fun onTextPasted(text: String, name: String?) {
+        if (text.isBlank()) return
+        importAttachment(isPhoto = false) { container.files.createDraftText(text, name) }
+    }
 
     private fun importAttachment(isPhoto: Boolean, load: suspend () -> TextAttachment) {
         viewModelScope.launch {

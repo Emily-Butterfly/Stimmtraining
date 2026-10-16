@@ -29,8 +29,10 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PictureAsPdf
@@ -53,6 +55,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,22 +70,30 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import de.emilybutterfly.stimmtraining.data.PastedText
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.data.document.DocumentKind
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Der Text, den man beim Aufnehmen liest: als Foto (Kamera oder Galerie) oder als Datei
- * (PDF, Word, OpenDocument, Text, …). Anzeigen, ersetzen oder entfernen.
+ * Der Text, den man beim Aufnehmen liest: als Foto (Kamera oder Galerie), als Datei
+ * (PDF, Word, OpenDocument, Text, …) oder eingefügt aus der Zwischenablage. Anzeigen,
+ * ersetzen, bearbeiten (eingefügte Texte und Textdateien) oder entfernen.
  *
  * [cameraTarget] liefert die Content-URI, in die die Kamera-App schreiben soll;
- * [onCameraResult] wird aufgerufen, sobald dort ein Foto liegt. [onExpand] öffnet den Text
+ * [onCameraResult] wird aufgerufen, sobald dort ein Foto liegt. [onTextPasted] bekommt den
+ * Text und den Namen, unter dem er erscheinen soll (null: aus der ersten Zeile). [onExpand] öffnet den Text
  * groß zum Lesen. Mit [enabled] = false lässt sich nichts ändern und keine andere App öffnen
  * (z. B. während einer Aufnahme, die sonst im Hintergrund enden würde); lesen geht weiter.
  */
@@ -94,6 +106,7 @@ fun TextAttachmentSection(
     onCameraResult: () -> Unit,
     onPhotoPicked: (Uri) -> Unit,
     onDocumentPicked: (Uri) -> Unit,
+    onTextPasted: (text: String, name: String?) -> Unit,
     onRemove: () -> Unit,
     onExpand: () -> Unit,
     onOpenExternally: (TextAttachment.Document) -> Unit,
@@ -129,6 +142,30 @@ fun TextAttachmentSection(
         }
     }
 
+    // Der Text im Editor übersteht auch, dass Android die App im Hintergrund beendet.
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    var editorValue by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
+    var editorName by rememberSaveable { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val pasteText = {
+        editorValue = TextFieldValue()
+        editorName = null
+        editorOpen = true
+    }
+    val editText = { document: TextAttachment.Document ->
+        scope.launch {
+            val text = withContext(Dispatchers.IO) { runCatching { PastedText.readForEditing(document.file) }.getOrNull() }
+            if (text == null) {
+                Toast.makeText(context, "Diese Datei lässt sich hier nicht bearbeiten.", Toast.LENGTH_SHORT).show()
+            } else {
+                editorValue = TextFieldValue(text, TextRange(text.length))
+                // Ein aus der ersten Zeile gebildeter Name passt sich dem neuen Text an.
+                editorName = document.name.takeIf { it != PastedText.name(text) }
+                editorOpen = true
+            }
+        }
+    }
+
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (attachment == null) {
             OutlinedCard(Modifier.fillMaxWidth()) {
@@ -136,24 +173,29 @@ fun TextAttachmentSection(
                     Text("Text zum Lesen", style = MaterialTheme.typography.titleSmall)
                     Text(
                         if (enabled) {
-                            "Fotografiere den Text oder wähle ein Bild oder eine Datei (PDF, Word, OpenDocument, " +
-                                "Text, Markdown) – er wird dir dann beim Aufnehmen angezeigt."
+                            "Fotografiere den Text, wähle ein Bild oder eine Datei (PDF, Word, OpenDocument, Text, " +
+                                "Markdown) oder füge ihn ein – er wird dir dann beim Aufnehmen angezeigt."
                         } else {
                             "Während der Aufnahme lässt sich kein Text hinzufügen."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    val padding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val padding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                         FilledTonalButton(onClick = openCamera, enabled = canChange, contentPadding = padding, modifier = Modifier.weight(1f)) {
                             ButtonLabel(Icons.Outlined.PhotoCamera, "Kamera")
                         }
                         OutlinedButton(onClick = openGallery, enabled = canChange, contentPadding = padding, modifier = Modifier.weight(1f)) {
                             ButtonLabel(Icons.Outlined.Image, "Galerie")
                         }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = openFile, enabled = canChange, contentPadding = padding, modifier = Modifier.weight(1f)) {
                             ButtonLabel(Icons.Outlined.Description, "Datei")
+                        }
+                        OutlinedButton(onClick = pasteText, enabled = canChange, contentPadding = padding, modifier = Modifier.weight(1f)) {
+                            ButtonLabel(Icons.Outlined.ContentPaste, "Einfügen")
                         }
                     }
                 }
@@ -196,6 +238,19 @@ fun TextAttachmentSection(
                                 openFile()
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text("Text einfügen") },
+                            leadingIcon = { Icon(Icons.Outlined.ContentPaste, contentDescription = null) },
+                            onClick = {
+                                menu = false
+                                pasteText()
+                            },
+                        )
+                    }
+                }
+                if (attachment is TextAttachment.Document && attachment.kind == DocumentKind.PlainText) {
+                    TextButton(onClick = { editText(attachment) }, enabled = canChange) {
+                        ButtonLabel(Icons.Outlined.Edit, "Bearbeiten")
                     }
                 }
                 TextButton(onClick = onRemove, enabled = canChange) {
@@ -204,6 +259,22 @@ fun TextAttachmentSection(
             }
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+    }
+
+    if (editorOpen) {
+        TextEditorDialog(
+            value = editorValue,
+            onValueChange = { editorValue = it },
+            onConfirm = {
+                onTextPasted(editorValue.text, editorName)
+                editorOpen = false
+                editorValue = TextFieldValue()
+            },
+            onDismiss = {
+                editorOpen = false
+                editorValue = TextFieldValue()
+            },
+        )
     }
 }
 

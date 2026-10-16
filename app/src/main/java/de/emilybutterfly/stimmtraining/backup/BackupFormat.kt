@@ -45,6 +45,7 @@ object BackupFormat {
                     .put("photo", r.photoFile?.let { PHOTO_DIR + it } ?: JSONObject.NULL)
                     .put("document", r.documentFile?.let { DOCUMENT_DIR + it } ?: JSONObject.NULL)
                     .put("documentName", r.documentName ?: JSONObject.NULL)
+                    .put("pitch", pitchJson(r))
                     .put("title", r.title)
                     .put("exercise", r.exercise)
                     .put("warmedUp", r.warmedUp)
@@ -107,8 +108,26 @@ object BackupFormat {
             selfRating = o.intOrNull("selfRating")?.takeIf { it in 1..5 },
             notes = o.stringOrNull("notes").orEmpty(),
             updatedAt = o.optLong("updatedAt", 0L),
-        )
+        ).withPitch(o.optJSONObject("pitch"))
         return Entry(recording)
+    }
+
+    private fun pitchJson(r: Recording): Any = r.pitchVoicedMs?.let { voicedMs ->
+        JSONObject()
+            .put("mostFrequent", r.pitchMostFrequent ?: JSONObject.NULL)
+            .put("lowest", r.pitchLowest ?: JSONObject.NULL)
+            .put("highest", r.pitchHighest ?: JSONObject.NULL)
+            .put("voicedMs", voicedMs)
+    } ?: JSONObject.NULL
+
+    /** Übernimmt die Tonhöhen-Analyse nur, wenn sie vollständig und plausibel ist; sonst lässt sie sich neu berechnen. */
+    private fun Recording.withPitch(pitch: JSONObject?): Recording {
+        if (pitch == null) return this
+        val voicedMs = pitch.optLong("voicedMs", -1L).takeIf { it >= 0 } ?: return this
+        val notes = listOf("mostFrequent", "lowest", "highest").map { pitch.intOrNull(it) }
+        if (notes.any { it != null && it !in 0..127 }) return this
+        if (notes.any { it == null } && notes.any { it != null }) return this
+        return copy(pitchMostFrequent = notes[0], pitchLowest = notes[1], pitchHighest = notes[2], pitchVoicedMs = voicedMs)
     }
 
     /**

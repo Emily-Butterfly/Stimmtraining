@@ -24,6 +24,14 @@ data class Recording(
     val photoFile: String?,
     val documentFile: String? = null,
     val documentName: String? = null,
+    /**
+     * Ergebnis der Tonhöhen-Analyse als MIDI-Noten (A4 = 69). [pitchVoicedMs] ist null, solange
+     * nicht analysiert wurde; die Noten sind null, wenn zu wenig Stimme erkannt wurde.
+     */
+    val pitchMostFrequent: Int? = null,
+    val pitchLowest: Int? = null,
+    val pitchHighest: Int? = null,
+    val pitchVoicedMs: Long? = null,
     val title: String,
     val exercise: String,
     val warmedUp: Boolean,

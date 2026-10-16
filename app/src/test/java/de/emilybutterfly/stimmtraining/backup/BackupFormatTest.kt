@@ -80,6 +80,22 @@ class BackupFormatTest {
     }
 
     @Test
+    fun pitchAnalysisRoundTripAndImplausibleValuesAreDropped() {
+        val analysed = sample.copy(pitchMostFrequent = 57, pitchLowest = 52, pitchHighest = 62, pitchVoicedMs = 12_345)
+        val noVoice = sample.copy(uuid = "1f8fad5b-d9cb-469f-a165-70867728950e", pitchVoicedMs = 120)
+        val json = JSONObject(BackupFormat.manifest(listOf(analysed, noVoice, sample), 1L, "1.0"))
+        val list = json.getJSONArray("recordings")
+        list.put(JSONObject(list.getJSONObject(0).toString()).put("pitch", JSONObject().put("mostFrequent", 500).put("lowest", 1).put("highest", 2).put("voicedMs", 10)))
+        list.put(JSONObject(list.getJSONObject(0).toString()).put("pitch", JSONObject().put("mostFrequent", 57).put("voicedMs", 10)))
+        val parsed = BackupFormat.parse(json.toString()).map { it.recording }
+        assertEquals(analysed.copy(id = 0), parsed[0])
+        assertEquals(noVoice.copy(id = 0), parsed[1])
+        assertNull(parsed[2].pitchVoicedMs)
+        assertNull("unplausible Note", parsed[3].pitchVoicedMs)
+        assertNull("unvollständig", parsed[4].pitchVoicedMs)
+    }
+
+    @Test
     fun rejectsForeignFiles() {
         assertThrows(BackupException::class.java) { BackupFormat.parse("""{"format":"other","recordings":[]}""") }
         assertThrows(BackupException::class.java) { BackupFormat.parse("kein json") }

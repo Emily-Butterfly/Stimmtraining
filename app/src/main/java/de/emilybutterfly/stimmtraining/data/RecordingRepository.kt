@@ -1,5 +1,6 @@
 package de.emilybutterfly.stimmtraining.data
 
+import de.emilybutterfly.stimmtraining.analysis.PitchResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -118,6 +119,11 @@ class RecordingRepository(
                 files.document(current.documentFile).delete()
             }
         }
+
+    /** Speichert das Ergebnis der Tonhöhen-Analyse (zählt als Änderung, damit es ins nächste Backup kommt). */
+    suspend fun savePitch(id: Long, result: PitchResult) = withContext(Dispatchers.IO) {
+        dao.updatePitch(id, result.mostFrequent, result.lowest, result.highest, result.voicedMs, System.currentTimeMillis())
+    }
 
     suspend fun delete(recording: Recording) = withContext(Dispatchers.IO) {
         dao.delete(recording)

@@ -42,9 +42,15 @@ class DatabaseMigrationTest {
             assertEquals(5, recording.selfRating)
             assertNull(recording.documentFile)
             assertNull(recording.documentName)
+            assertNull("noch nicht analysiert", recording.pitchVoicedMs)
+            assertNull(recording.pitchMostFrequent)
 
             db.recordingDao().update(recording.copy(photoFile = null, documentFile = "b.pdf", documentName = "Nordwind.pdf"))
             assertEquals("Nordwind.pdf", db.recordingDao().get(recording.id)?.documentName)
+            db.recordingDao().updatePitch(recording.id, 57, 52, 62, 9_000, updatedAt = 2L)
+            val analysed = db.recordingDao().get(recording.id)
+            assertEquals(57, analysed?.pitchMostFrequent)
+            assertEquals(9_000L, analysed?.pitchVoicedMs)
         } finally {
             db.close()
             context.deleteDatabase(name)

@@ -10,11 +10,13 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import de.emilybutterfly.stimmtraining.AppContainer
+import de.emilybutterfly.stimmtraining.analysis.PitchAnalyzer
 import de.emilybutterfly.stimmtraining.data.AttachmentChange
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.app
+import de.emilybutterfly.stimmtraining.ui.createDraftText
 import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
 import de.emilybutterfly.stimmtraining.ui.importDraftDocument
@@ -22,7 +24,9 @@ import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
 import de.emilybutterfly.stimmtraining.ui.openWithChooser
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -109,6 +113,11 @@ class DetailViewModel(
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
+    /** Fortschritt (0..1) der laufenden Tonhöhen-Analyse, sonst null. */
+    private val _pitchProgress = MutableStateFlow<Float?>(null)
+    val pitchProgress: StateFlow<Float?> = _pitchProgress.asStateFlow()
+    private var pitchJob: Job? = null
+
     private val current: Recording? get() = (load.value as? DetailLoad.Ready)?.recording
 
     fun audioFile(recording: Recording): File = files.audio(recording.audioFile)
@@ -143,6 +152,11 @@ class DetailViewModel(
     fun onPhotoPicked(uri: Uri) = importAttachment(isPhoto = true) { TextAttachment.Photo(files.importDraftPhoto(app, uri)) }
 
     fun onDocumentPicked(uri: Uri) = importAttachment(isPhoto = false) { files.importDraftDocument(app, uri) }
+
+    fun onTextPasted(text: String, name: String?) {
+        if (text.isBlank()) return
+        importAttachment(isPhoto = false) { files.createDraftText(text, name) }
+    }
 
     private fun importAttachment(isPhoto: Boolean, load: suspend () -> TextAttachment) {
         if (_edit.value == null) return
@@ -197,6 +211,27 @@ class DetailViewModel(
             } catch (e: Exception) {
                 _edit.update { it?.copy(saving = false) }
                 _message.value = "Speichern fehlgeschlagen: ${e.message}"
+            }
+        }
+    }
+
+    // --- Tonhöhe ---
+
+    /** Analysiert die Tonhöhe der Aufnahme – nur auf dem Gerät – und speichert das Ergebnis. */
+    fun analyzePitch() {
+        val recording = current ?: return
+        if (pitchJob?.isActive == true) return
+        _pitchProgress.value = 0f
+        pitchJob = viewModelScope.launch {
+            try {
+                val result = PitchAnalyzer.analyzeFile(audioFile(recording)) { _pitchProgress.value = it }
+                withContext(NonCancellable) { container.repository.savePitch(id, result) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = "Die Tonhöhe ließ sich nicht analysieren: ${e.message}"
+            } finally {
+                _pitchProgress.value = null
             }
         }
     }

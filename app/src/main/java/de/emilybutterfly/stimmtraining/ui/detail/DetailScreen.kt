@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,6 +21,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -28,11 +32,13 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -46,10 +52,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import de.emilybutterfly.stimmtraining.analysis.Notes
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.components.AttachmentPreview
@@ -65,6 +74,7 @@ import de.emilybutterfly.stimmtraining.ui.components.formatDateTime
 import de.emilybutterfly.stimmtraining.ui.components.formatDuration
 import de.emilybutterfly.stimmtraining.ui.components.rememberReaderSettings
 import java.io.File
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +86,7 @@ fun DetailScreen(
     val load by viewModel.load.collectAsStateWithLifecycle()
     val edit by viewModel.edit.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val pitchProgress by viewModel.pitchProgress.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
@@ -170,6 +181,7 @@ fun DetailScreen(
                         onCameraResult = viewModel::onCameraPhoto,
                         onPhotoPicked = viewModel::onPhotoPicked,
                         onDocumentPicked = viewModel::onDocumentPicked,
+                        onTextPasted = viewModel::onTextPasted,
                         onRemove = viewModel::removeAttachment,
                         onExpand = { viewing = true },
                         onOpenExternally = openExternally,
@@ -185,6 +197,8 @@ fun DetailScreen(
                         recording = recording,
                         audio = viewModel.audioFile(recording),
                         attachment = viewModel.attachment(recording),
+                        pitchProgress = pitchProgress,
+                        onAnalyzePitch = viewModel::analyzePitch,
                         reader = reader,
                         onExpand = { viewing = true },
                         onOpenExternally = openExternally,
@@ -218,6 +232,8 @@ private fun RecordingDetails(
     recording: Recording,
     audio: File,
     attachment: TextAttachment?,
+    pitchProgress: Float?,
+    onAnalyzePitch: () -> Unit,
     reader: ReaderSettings,
     onExpand: () -> Unit,
     onOpenExternally: (TextAttachment.Document) -> Unit,
@@ -232,6 +248,8 @@ private fun RecordingDetails(
             AudioPlayerBar(audio, Modifier.fillMaxWidth())
         }
     }
+
+    PitchCard(recording, pitchProgress, onAnalyzePitch)
 
     if (attachment != null) {
         AttachmentPreview(attachment, reader, onExpand = onExpand, onOpenExternally = onOpenExternally)
@@ -271,6 +289,75 @@ private fun RecordingDetails(
         }
     }
 }
+
+/** Häufigste, tiefste und höchste Note der Aufnahme – oder der Knopf, sie zu ermitteln. */
+@Composable
+private fun PitchCard(recording: Recording, progress: Float?, onAnalyze: () -> Unit) {
+    Card {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.MusicNote, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("Tonhöhe", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                if (recording.pitchVoicedMs != null && progress == null) {
+                    TextButton(onClick = onAnalyze) { Text("Neu analysieren") }
+                }
+            }
+            val most = recording.pitchMostFrequent
+            val lowest = recording.pitchLowest
+            val highest = recording.pitchHighest
+            when {
+                progress != null -> {
+                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                    Text("Die Tonhöhe wird analysiert …", style = MaterialTheme.typography.bodySmall)
+                }
+                recording.pitchVoicedMs == null -> {
+                    Text(
+                        "Ermittelt, welche Note du am häufigsten sprichst, und die tiefste und höchste Note. " +
+                            "Die Analyse läuft nur auf diesem Handy – die Aufnahme verlässt das Gerät nicht.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(onClick = onAnalyze, modifier = Modifier.fillMaxWidth()) { Text("Tonhöhe analysieren") }
+                }
+                most == null || lowest == null || highest == null -> Text(
+                    "In dieser Aufnahme wurde zu wenig Stimme erkannt.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                else -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NoteTile("Tiefste", lowest, Modifier.weight(1f))
+                        NoteTile("Häufigste", most, Modifier.weight(1f), highlight = true)
+                        NoteTile("Höchste", highest, Modifier.weight(1f))
+                    }
+                    Text(
+                        "Ausgewertet: ${formatSpokenTime(recording.pitchVoicedMs)} Stimme. Kurze Ausreißer zählen nicht.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoteTile(label: String, midi: Int, modifier: Modifier = Modifier, highlight: Boolean = false) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (highlight) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier.semantics(mergeDescendants = true) {},
+    ) {
+        Column(Modifier.padding(vertical = 12.dp, horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Text(Notes.name(midi), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text("${Notes.frequency(midi).roundToInt()} Hz", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+private fun formatSpokenTime(millis: Long): String =
+    if (millis < 60_000) "${(millis + 500) / 1000} s" else "${formatDuration(millis)} min"
 
 @Composable
 private fun DetailRow(label: String, value: String) {

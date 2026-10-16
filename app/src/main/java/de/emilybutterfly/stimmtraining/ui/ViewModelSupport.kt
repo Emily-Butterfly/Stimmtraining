@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.ImageImporter
+import de.emilybutterfly.stimmtraining.data.PastedText
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.data.document.DocumentImporter
@@ -71,6 +72,11 @@ suspend fun FileStore.importCameraCapture(context: Context): File {
 /** Übernimmt eine Datei (PDF, Word, Text, …) als Entwurf. */
 suspend fun FileStore.importDraftDocument(context: Context, source: Uri): TextAttachment.Document =
     withContext(Dispatchers.IO) { DocumentImporter.import(context.contentResolver, this@importDraftDocument, source) }
+
+/** Übernimmt eingefügten Text als Entwurf; ohne [name] heißt er wie seine erste Zeile. */
+suspend fun FileStore.createDraftText(text: String, name: String?): TextAttachment.Document = withContext(Dispatchers.IO) {
+    TextAttachment.Document(PastedText.createDraft(this@createDraftText, text), name ?: PastedText.name(text))
+}
 
 /** Ein „Öffnen mit …“-Dialog für ein Dokument. */
 suspend fun FileStore.openWithChooser(document: TextAttachment.Document): Intent = withContext(Dispatchers.IO) {

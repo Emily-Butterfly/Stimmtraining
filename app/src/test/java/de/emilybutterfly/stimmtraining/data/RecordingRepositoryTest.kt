@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import de.emilybutterfly.stimmtraining.analysis.PitchResult
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -123,6 +124,23 @@ class RecordingRepositoryTest {
         repository.delete(db.recordingDao().get(id)!!)
         assertEquals(0, files.documentDir.listFiles()?.size ?: 0)
         assertEquals(0, files.audioDir.listFiles()?.size ?: 0)
+    }
+
+    @Test
+    fun pitchResultIsStoredAndKeptWhenEditing() = runBlocking {
+        val id = repository.create(files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1)) }, null, 1L, 1L, RecordingParams())
+        val before = db.recordingDao().get(id)!!
+
+        repository.savePitch(id, PitchResult(mostFrequent = 57, lowest = 52, highest = 62, voicedMs = 8_000))
+        val analysed = db.recordingDao().get(id)!!
+        assertEquals(57, analysed.pitchMostFrequent)
+        assertEquals(52, analysed.pitchLowest)
+        assertEquals(62, analysed.pitchHighest)
+        assertEquals(8_000L, analysed.pitchVoicedMs)
+        assertTrue("zählt als Änderung fürs Backup", analysed.updatedAt >= before.updatedAt)
+
+        repository.update(id, analysed.params().copy(notes = "neu"), AttachmentChange.Keep)
+        assertEquals(57, db.recordingDao().get(id)!!.pitchMostFrequent)
     }
 
     @Test
