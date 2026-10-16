@@ -7,9 +7,11 @@ import androidx.room.PrimaryKey
 /**
  * Eine gespeicherte Stimmaufnahme mit ihren Parametern.
  *
- * [audioFile] und [photoFile] sind reine Dateinamen in [FileStore.audioDir] bzw.
- * [FileStore.photoDir]. [uuid] identifiziert die Aufnahme geräteübergreifend, damit beim
- * Wiederherstellen eines Backups nichts doppelt importiert wird.
+ * [audioFile], [photoFile] und [documentFile] sind reine Dateinamen in [FileStore.audioDir],
+ * [FileStore.photoDir] bzw. [FileStore.documentDir]. Der gelesene Text hängt entweder als Foto
+ * oder als Datei (PDF, Word, …) an; [documentName] ist der ursprüngliche Name der Datei.
+ * [uuid] identifiziert die Aufnahme geräteübergreifend, damit beim Wiederherstellen eines
+ * Backups nichts doppelt importiert wird.
  */
 @Entity(tableName = "recordings", indices = [Index(value = ["uuid"], unique = true)])
 data class Recording(
@@ -20,6 +22,8 @@ data class Recording(
     val durationMs: Long,
     val audioFile: String,
     val photoFile: String?,
+    val documentFile: String? = null,
+    val documentName: String? = null,
     val title: String,
     val exercise: String,
     val warmedUp: Boolean,

@@ -9,8 +9,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.core.app.ApplicationProvider
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
 import de.emilybutterfly.stimmtraining.data.RecordingParams
+import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.record.RecordViewModel
 import de.emilybutterfly.stimmtraining.ui.record.RecorderPhase
+import de.emilybutterfly.stimmtraining.ui.record.StorageWarning
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -45,7 +47,7 @@ class DraftRestoreTest {
         val restored = RecordViewModel(app, app.container, handle).state.value
         assertEquals(RecorderPhase.Done, restored.phase)
         assertEquals(audio, restored.audio)
-        assertEquals(photo, restored.photo)
+        assertEquals(TextAttachment.Photo(photo), restored.attachment)
         assertEquals(params, restored.params)
         assertEquals(1_791_000_000_000L, restored.recordedAt)
         assertEquals(42_000L, restored.durationMs)
@@ -97,14 +99,60 @@ class DraftRestoreTest {
     }
 
     @Test
+    fun documentDraftIsRestoredAndDeletedWhenDiscarded() {
+        val document = app.container.files.newDraftFile("pdf").apply { writeBytes(ByteArray(10)) }
+        val handle = SavedStateHandle()
+        handle[RecordViewModel.KEY_DOCUMENT] = document.absolutePath
+        handle[RecordViewModel.KEY_DOCUMENT_NAME] = "Nordwind und Sonne.pdf"
+
+        val restored = RecordViewModel(app, app.container, handle)
+        assertEquals(TextAttachment.Document(document, "Nordwind und Sonne.pdf"), restored.state.value.attachment)
+        assertTrue("ein angehängter Text ist ein Entwurf", restored.state.value.hasDraft)
+        restored.discardDraft()
+        assertFalse(document.exists())
+        assertNull(restored.state.value.attachment)
+    }
+
+    @Test
+    fun lowStorageWarnsBeforeRecordingAndFullStorageBlocksIt() {
+        var free = 30L * 1024 * 1024
+        val viewModel = RecordViewModel(app, app.container, SavedStateHandle(), freeBytes = { free })
+
+        viewModel.startRecording()
+        val warning = viewModel.state.value.storageWarning
+        assertEquals(StorageWarning(free, full = false), warning)
+        assertEquals(21L, warning?.minutesLeft) // (30 MB − 10 MB Reserve) bei knapp 1 MB pro Minute
+        assertEquals(RecorderPhase.Idle, viewModel.state.value.phase)
+        viewModel.dismissStorageWarning()
+        assertNull(viewModel.state.value.storageWarning)
+
+        // Unter der Reserve hilft auch „Trotzdem aufnehmen“ nicht.
+        free = 10L * 1024 * 1024 + 100_000
+        viewModel.startRecording(ignoreLowStorage = true)
+        assertEquals(true, viewModel.state.value.storageWarning?.full)
+        assertEquals(RecorderPhase.Idle, viewModel.state.value.phase)
+    }
+
+    @Test
+    fun withEnoughStorageRecordingStartsWithoutWarning() {
+        val viewModel = RecordViewModel(app, app.container, SavedStateHandle(), freeBytes = { 4L shl 30 })
+        viewModel.startRecording()
+        assertNull(viewModel.state.value.storageWarning)
+        assertEquals(RecorderPhase.Recording, viewModel.state.value.phase)
+        viewModel.discardRecording()
+        assertEquals(RecorderPhase.Idle, viewModel.state.value.phase)
+    }
+
+    @Test
     fun missingDraftFilesAreIgnored() {
         val handle = SavedStateHandle()
         handle[RecordViewModel.KEY_AUDIO] = "/nicht/vorhanden.m4a"
         handle[RecordViewModel.KEY_PHOTO] = "/nicht/vorhanden.jpg"
+        handle[RecordViewModel.KEY_DOCUMENT] = "/nicht/vorhanden.pdf"
 
         val restored = RecordViewModel(app, app.container, handle).state.value
         assertEquals(RecorderPhase.Idle, restored.phase)
         assertNull(restored.audio)
-        assertNull(restored.photo)
+        assertNull(restored.attachment)
     }
 }

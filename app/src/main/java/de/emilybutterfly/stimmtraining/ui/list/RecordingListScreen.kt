@@ -53,11 +53,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
-import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
+import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.app
 import de.emilybutterfly.stimmtraining.ui.components.RatingDisplay
+import de.emilybutterfly.stimmtraining.ui.components.documentIcon
 import de.emilybutterfly.stimmtraining.ui.components.formatDay
 import de.emilybutterfly.stimmtraining.ui.components.formatDuration
 import de.emilybutterfly.stimmtraining.ui.components.formatTime
@@ -65,21 +66,17 @@ import de.emilybutterfly.stimmtraining.ui.components.localDate
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
-import java.io.File
 
-class RecordingListViewModel(repository: RecordingRepository, private val files: FileStore) : ViewModel() {
+class RecordingListViewModel(private val repository: RecordingRepository) : ViewModel() {
     /** null, solange noch geladen wird. */
     val recordings: StateFlow<List<Recording>?> = repository.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    fun photoFile(recording: Recording): File? = recording.photoFile?.let(files::photo)
+    fun attachment(recording: Recording): TextAttachment? = repository.attachmentOf(recording)
 
     companion object {
         val Factory = viewModelFactory {
-            initializer {
-                val container = app().container
-                RecordingListViewModel(container.repository, container.files)
-            }
+            initializer { RecordingListViewModel(app().container.repository) }
         }
     }
 }
@@ -125,7 +122,7 @@ fun RecordingListScreen(
             list.isEmpty() -> EmptyState(onOpenTechniques, Modifier.fillMaxSize().padding(padding))
             else -> RecordingList(
                 recordings = list,
-                photoFile = viewModel::photoFile,
+                attachment = viewModel::attachment,
                 onOpen = onOpenRecording,
                 contentPadding = padding,
             )
@@ -136,7 +133,7 @@ fun RecordingListScreen(
 @Composable
 private fun RecordingList(
     recordings: List<Recording>,
-    photoFile: (Recording) -> File?,
+    attachment: (Recording) -> TextAttachment?,
     onOpen: (Long) -> Unit,
     contentPadding: PaddingValues,
 ) {
@@ -171,23 +168,23 @@ private fun RecordingList(
                 )
             }
             items(entries, key = { it.id }) { recording ->
-                RecordingCard(recording, photoFile(recording), onClick = { onOpen(recording.id) })
+                RecordingCard(recording, attachment(recording), onClick = { onOpen(recording.id) })
             }
         }
     }
 }
 
 @Composable
-private fun RecordingCard(recording: Recording, photo: File?, onClick: () -> Unit) {
+private fun RecordingCard(recording: Recording, attachment: TextAttachment?, onClick: () -> Unit) {
     ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (photo != null) {
+            if (attachment is TextAttachment.Photo) {
                 AsyncImage(
-                    model = photo,
+                    model = attachment.file,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)),
@@ -201,7 +198,7 @@ private fun RecordingCard(recording: Recording, photo: File?, onClick: () -> Uni
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.Filled.GraphicEq,
+                        if (attachment is TextAttachment.Document) documentIcon(attachment.kind) else Icons.Filled.GraphicEq,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
@@ -271,7 +268,7 @@ private fun EmptyState(onOpenTechniques: () -> Unit, modifier: Modifier = Modifi
         )
         Text("Noch keine Aufnahmen", style = MaterialTheme.typography.titleLarge)
         Text(
-            "Tippe auf „Neue Aufnahme“, fotografiere optional den Text, den du liest, und halte fest, ob du aufgewärmt bist.",
+            "Tippe auf „Neue Aufnahme“, hänge optional den Text an, den du liest (Foto oder Datei), und halte fest, ob du aufgewärmt bist.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

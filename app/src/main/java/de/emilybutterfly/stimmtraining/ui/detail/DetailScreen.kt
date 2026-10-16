@@ -1,7 +1,6 @@
 package de.emilybutterfly.stimmtraining.ui.detail
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,11 +8,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -33,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -47,24 +45,25 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import de.emilybutterfly.stimmtraining.data.Recording
+import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.ui.components.AttachmentPreview
+import de.emilybutterfly.stimmtraining.ui.components.AttachmentViewer
 import de.emilybutterfly.stimmtraining.ui.components.AudioPlayerBar
 import de.emilybutterfly.stimmtraining.ui.components.ParameterForm
-import de.emilybutterfly.stimmtraining.ui.components.PhotoSection
-import de.emilybutterfly.stimmtraining.ui.components.PhotoViewer
 import de.emilybutterfly.stimmtraining.ui.components.RatingDisplay
+import de.emilybutterfly.stimmtraining.ui.components.ReaderSettings
 import de.emilybutterfly.stimmtraining.ui.components.SELF_RATING_LABELS
+import de.emilybutterfly.stimmtraining.ui.components.TextAttachmentSection
 import de.emilybutterfly.stimmtraining.ui.components.VOICE_CONDITION_LABELS
 import de.emilybutterfly.stimmtraining.ui.components.formatDateTime
 import de.emilybutterfly.stimmtraining.ui.components.formatDuration
+import de.emilybutterfly.stimmtraining.ui.components.rememberReaderSettings
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -80,10 +79,15 @@ fun DetailScreen(
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var viewing by rememberSaveable { mutableStateOf(false) }
+    val reader = rememberReaderSettings()
+    val openExternally = { document: TextAttachment.Document ->
+        viewModel.openExternally(document) { context.startActivity(it) }
+    }
 
     LaunchedEffect(message) {
         message?.let {
-            snackbar.showSnackbar(it)
+            snackbar.showSnackbar(it, duration = if (it.length > 80) SnackbarDuration.Long else SnackbarDuration.Short)
             viewModel.messageShown()
         }
     }
@@ -115,7 +119,7 @@ fun DetailScreen(
                 },
                 actions = {
                     if (editing != null) {
-                        IconButton(onClick = viewModel::saveEdit, enabled = !editing.saving && !editing.photoBusy) {
+                        IconButton(onClick = viewModel::saveEdit, enabled = !editing.saving && !editing.attachmentBusy) {
                             Icon(Icons.Filled.Check, contentDescription = "Speichern")
                         }
                     } else if (recording != null) {
@@ -158,36 +162,46 @@ fun DetailScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    PhotoSection(
-                        photo = viewModel.editedPhoto(recording, editing),
-                        busy = editing.photoBusy,
+                    TextAttachmentSection(
+                        attachment = viewModel.editedAttachment(recording, editing),
+                        busy = editing.attachmentBusy,
+                        reader = reader,
                         cameraTarget = viewModel::cameraTarget,
                         onCameraResult = viewModel::onCameraPhoto,
-                        onPicked = viewModel::onPhotoPicked,
-                        onRemove = viewModel::removePhoto,
+                        onPhotoPicked = viewModel::onPhotoPicked,
+                        onDocumentPicked = viewModel::onDocumentPicked,
+                        onRemove = viewModel::removeAttachment,
+                        onExpand = { viewing = true },
+                        onOpenExternally = openExternally,
                     )
                     ParameterForm(params = editing.params, onChange = viewModel::updateParams)
                     Button(
                         onClick = viewModel::saveEdit,
-                        enabled = !editing.saving && !editing.photoBusy,
+                        enabled = !editing.saving && !editing.attachmentBusy,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Änderungen speichern") }
                 } else {
                     RecordingDetails(
                         recording = recording,
                         audio = viewModel.audioFile(recording),
-                        photo = viewModel.photoFile(recording),
+                        attachment = viewModel.attachment(recording),
+                        reader = reader,
+                        onExpand = { viewing = true },
+                        onOpenExternally = openExternally,
                     )
                 }
             }
         }
     }
 
+    val shown = recording?.let { if (editing != null) viewModel.editedAttachment(it, editing) else viewModel.attachment(it) }
+    if (viewing && shown != null) AttachmentViewer(shown, reader, onDismiss = { viewing = false })
+
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Aufnahme löschen?") },
-            text = { Text("Audio, Foto und Angaben werden endgültig gelöscht.") },
+            text = { Text("Audio, Text (Foto oder Datei) und Angaben werden endgültig gelöscht.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
@@ -200,9 +214,14 @@ fun DetailScreen(
 }
 
 @Composable
-private fun RecordingDetails(recording: Recording, audio: File, photo: File?) {
-    var showPhoto by rememberSaveable { mutableStateOf(false) }
-
+private fun RecordingDetails(
+    recording: Recording,
+    audio: File,
+    attachment: TextAttachment?,
+    reader: ReaderSettings,
+    onExpand: () -> Unit,
+    onOpenExternally: (TextAttachment.Document) -> Unit,
+) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
@@ -214,17 +233,8 @@ private fun RecordingDetails(recording: Recording, audio: File, photo: File?) {
         }
     }
 
-    if (photo != null) {
-        AsyncImage(
-            model = photo,
-            contentDescription = "Foto des Textes, antippen zum Vergrößern",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = 480.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClickLabel = "Foto vergrößern") { showPhoto = true },
-        )
+    if (attachment != null) {
+        AttachmentPreview(attachment, reader, onExpand = onExpand, onOpenExternally = onOpenExternally)
     }
 
     Card {
@@ -260,8 +270,6 @@ private fun RecordingDetails(recording: Recording, audio: File, photo: File?) {
             }
         }
     }
-
-    if (showPhoto && photo != null) PhotoViewer(photo = photo, onDismiss = { showPhoto = false })
 }
 
 @Composable

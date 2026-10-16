@@ -10,13 +10,16 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import de.emilybutterfly.stimmtraining.AppContainer
-import de.emilybutterfly.stimmtraining.data.PhotoChange
+import de.emilybutterfly.stimmtraining.data.AttachmentChange
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingParams
+import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.app
 import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
+import de.emilybutterfly.stimmtraining.ui.importDraftDocument
 import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
+import de.emilybutterfly.stimmtraining.ui.openWithChooser
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -44,8 +48,8 @@ sealed interface DetailLoad {
 
 data class EditState(
     val params: RecordingParams,
-    val photoChange: PhotoChange = PhotoChange.Keep,
-    val photoBusy: Boolean = false,
+    val attachmentChange: AttachmentChange = AttachmentChange.Keep,
+    val attachmentBusy: Boolean = false,
     val saving: Boolean = false,
 )
 
@@ -68,7 +72,7 @@ class DetailViewModel(
         // Bearbeitungsstand sichern, damit er überlebt, wenn Android die App beendet,
         // während z. B. die Kamera-App offen ist.
         viewModelScope.launch {
-            _edit.map { it?.copy(photoBusy = false, saving = false) }.distinctUntilChanged().collect(::persistEdit)
+            _edit.map { it?.copy(attachmentBusy = false, saving = false) }.distinctUntilChanged().collect(::persistEdit)
         }
     }
 
@@ -76,23 +80,30 @@ class DetailViewModel(
         savedState[KEY_EDITING] = edit != null
         if (edit == null) return
         savedState.putParams(KEY_PARAMS, edit.params)
-        savedState[KEY_PHOTO_MODE] = when (edit.photoChange) {
-            PhotoChange.Keep -> "keep"
-            PhotoChange.Remove -> "remove"
-            is PhotoChange.Replace -> "replace"
+        val replacement = (edit.attachmentChange as? AttachmentChange.Replace)?.attachment
+        savedState[KEY_ATTACHMENT_MODE] = when (edit.attachmentChange) {
+            AttachmentChange.Keep -> "keep"
+            AttachmentChange.Remove -> "remove"
+            is AttachmentChange.Replace -> "replace"
         }
-        savedState[KEY_PHOTO_DRAFT] = (edit.photoChange as? PhotoChange.Replace)?.draft?.absolutePath
+        savedState[KEY_ATTACHMENT_DRAFT] = replacement?.file?.absolutePath
+        // Nur bei Dateien gesetzt; daran erkennt die Wiederherstellung Foto oder Datei.
+        savedState[KEY_ATTACHMENT_NAME] = (replacement as? TextAttachment.Document)?.name
     }
 
     private fun restoreEdit(): EditState? {
         if (savedState.get<Boolean>(KEY_EDITING) != true) return null
-        val draft = savedState.get<String>(KEY_PHOTO_DRAFT)?.let(::File)?.takeIf { it.isFile }
-        val photoChange = when (savedState.get<String>(KEY_PHOTO_MODE)) {
-            "remove" -> PhotoChange.Remove
-            "replace" -> draft?.let { PhotoChange.Replace(it) } ?: PhotoChange.Keep
-            else -> PhotoChange.Keep
+        val draft = savedState.get<String>(KEY_ATTACHMENT_DRAFT)?.let(::File)?.takeIf { it.isFile }
+        val name = savedState.get<String>(KEY_ATTACHMENT_NAME)
+        val change = when (savedState.get<String>(KEY_ATTACHMENT_MODE)) {
+            "remove" -> AttachmentChange.Remove
+            "replace" -> draft
+                ?.let { if (name != null) TextAttachment.Document(it, name) else TextAttachment.Photo(it) }
+                ?.let { AttachmentChange.Replace(it) }
+                ?: AttachmentChange.Keep
+            else -> AttachmentChange.Keep
         }
-        return EditState(params = savedState.getParams(KEY_PARAMS), photoChange = photoChange)
+        return EditState(params = savedState.getParams(KEY_PARAMS), attachmentChange = change)
     }
 
     private val _message = MutableStateFlow<String?>(null)
@@ -102,13 +113,13 @@ class DetailViewModel(
 
     fun audioFile(recording: Recording): File = files.audio(recording.audioFile)
 
-    fun photoFile(recording: Recording): File? = recording.photoFile?.let(files::photo)
+    fun attachment(recording: Recording): TextAttachment? = container.repository.attachmentOf(recording)
 
-    /** Das Foto, das im Bearbeiten-Modus gerade angezeigt werden soll. */
-    fun editedPhoto(recording: Recording, edit: EditState): File? = when (val change = edit.photoChange) {
-        PhotoChange.Keep -> photoFile(recording)
-        PhotoChange.Remove -> null
-        is PhotoChange.Replace -> change.draft
+    /** Der Text, der im Bearbeiten-Modus gerade angezeigt werden soll. */
+    fun editedAttachment(recording: Recording, edit: EditState): TextAttachment? = when (val change = edit.attachmentChange) {
+        AttachmentChange.Keep -> attachment(recording)
+        AttachmentChange.Remove -> null
+        is AttachmentChange.Replace -> change.attachment
     }
 
     // --- Bearbeiten ---
@@ -119,7 +130,7 @@ class DetailViewModel(
     }
 
     fun cancelEdit() {
-        discardPhotoDraft()
+        discardAttachmentDraft()
         _edit.value = null
     }
 
@@ -127,45 +138,61 @@ class DetailViewModel(
 
     fun cameraTarget(): Uri = files.prepareCameraCapture()
 
-    fun onCameraPhoto() = importPhoto { files.importCameraCapture(app) }
+    fun onCameraPhoto() = importAttachment(isPhoto = true) { TextAttachment.Photo(files.importCameraCapture(app)) }
 
-    fun onPhotoPicked(uri: Uri) = importPhoto { files.importDraftPhoto(app, uri) }
+    fun onPhotoPicked(uri: Uri) = importAttachment(isPhoto = true) { TextAttachment.Photo(files.importDraftPhoto(app, uri)) }
 
-    private fun importPhoto(load: suspend () -> File) {
+    fun onDocumentPicked(uri: Uri) = importAttachment(isPhoto = false) { files.importDraftDocument(app, uri) }
+
+    private fun importAttachment(isPhoto: Boolean, load: suspend () -> TextAttachment) {
         if (_edit.value == null) return
         viewModelScope.launch {
-            _edit.update { it?.copy(photoBusy = true) }
+            _edit.update { it?.copy(attachmentBusy = true) }
             try {
-                val photo = load()
-                discardPhotoDraft()
+                val attachment = load()
+                discardAttachmentDraft()
                 if (_edit.value == null) {
-                    photo.delete()
+                    attachment.file.delete()
                 } else {
-                    _edit.update { it?.copy(photoChange = PhotoChange.Replace(photo), photoBusy = false) }
+                    _edit.update { it?.copy(attachmentChange = AttachmentChange.Replace(attachment), attachmentBusy = false) }
                 }
             } catch (e: Exception) {
-                _edit.update { it?.copy(photoBusy = false) }
-                _message.value = "Foto konnte nicht übernommen werden: ${e.message}"
+                _edit.update { it?.copy(attachmentBusy = false) }
+                _message.value = when {
+                    isPhoto -> "Foto konnte nicht übernommen werden: ${e.message}"
+                    e is IOException && !e.message.isNullOrBlank() -> e.message
+                    else -> "Die Datei konnte nicht übernommen werden."
+                }
             }
         }
     }
 
-    fun removePhoto() {
-        discardPhotoDraft()
-        _edit.update { it?.copy(photoChange = PhotoChange.Remove) }
+    fun removeAttachment() {
+        discardAttachmentDraft()
+        _edit.update { it?.copy(attachmentChange = AttachmentChange.Remove) }
     }
 
-    private fun discardPhotoDraft() {
-        (_edit.value?.photoChange as? PhotoChange.Replace)?.draft?.delete()
+    private fun discardAttachmentDraft() {
+        (_edit.value?.attachmentChange as? AttachmentChange.Replace)?.attachment?.file?.delete()
+    }
+
+    fun openExternally(document: TextAttachment.Document, onReady: (Intent) -> Unit) {
+        viewModelScope.launch {
+            try {
+                onReady(files.openWithChooser(document))
+            } catch (e: Exception) {
+                _message.value = "Die Datei lässt sich nicht öffnen: ${e.message}"
+            }
+        }
     }
 
     fun saveEdit() {
         val edit = _edit.value ?: return
-        if (edit.saving || edit.photoBusy) return
+        if (edit.saving || edit.attachmentBusy) return
         _edit.value = edit.copy(saving = true)
         viewModelScope.launch {
             try {
-                withContext(NonCancellable) { container.repository.update(id, edit.params, edit.photoChange) }
+                withContext(NonCancellable) { container.repository.update(id, edit.params, edit.attachmentChange) }
                 _edit.value = null
             } catch (e: Exception) {
                 _edit.update { it?.copy(saving = false) }
@@ -217,8 +244,9 @@ class DetailViewModel(
     companion object {
         private const val KEY_EDITING = "editing"
         private const val KEY_PARAMS = "edit"
-        private const val KEY_PHOTO_MODE = "photoMode"
-        private const val KEY_PHOTO_DRAFT = "photoDraft"
+        private const val KEY_ATTACHMENT_MODE = "attachmentMode"
+        private const val KEY_ATTACHMENT_DRAFT = "attachmentDraft"
+        private const val KEY_ATTACHMENT_NAME = "attachmentName"
 
         fun factory(id: Long) = viewModelFactory {
             initializer {

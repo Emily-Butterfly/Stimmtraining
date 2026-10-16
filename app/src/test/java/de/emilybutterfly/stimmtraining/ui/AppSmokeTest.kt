@@ -13,6 +13,7 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import de.emilybutterfly.stimmtraining.MainActivity
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
 import de.emilybutterfly.stimmtraining.data.RecordingParams
+import de.emilybutterfly.stimmtraining.data.TextAttachment
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -44,7 +45,7 @@ class AppSmokeTest {
         text("Neue Aufnahme").performClick()
         text("Tippen, um die Aufnahme zu starten").assertExists()
         text("Vorher aufgewärmt").performScrollTo().assertExists()
-        text("Foto vom Text").performScrollTo().assertExists()
+        text("Text zum Lesen").performScrollTo().assertExists()
         compose.onNodeWithContentDescription("Zurück").performClick()
 
         compose.onNodeWithContentDescription("Backup").performClick()
@@ -75,6 +76,34 @@ class AppSmokeTest {
     }
 
     @Test
+    fun recordingWithADocumentShowsTheText() {
+        val container = ApplicationProvider.getApplicationContext<StimmtrainingApp>().container
+        runBlocking {
+            val audio = container.files.newDraftFile("m4a").apply { writeBytes(ByteArray(10)) }
+            val text = container.files.newDraftFile("txt").apply {
+                writeText("Einst stritten sich Nordwind und Sonne,\nwer von ihnen beiden wohl der Stärkere wäre.")
+            }
+            container.repository.create(
+                audio,
+                TextAttachment.Document(text, "Nordwind und Sonne.txt"),
+                System.currentTimeMillis(),
+                30_000,
+                RecordingParams(exercise = "Text lesen"),
+            )
+        }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Text lesen") }
+        text("Text lesen").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Nordwind und Sonne.txt") }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Einst stritten sich Nordwind und Sonne,", substring = true) }
+        compose.onNodeWithContentDescription("Schrift größer").assertExists()
+        text("In anderer App öffnen").assertExists()
+
+        // Groß anzeigen öffnet die Leseansicht.
+        compose.onNodeWithContentDescription("Groß anzeigen").performClick()
+        compose.onNodeWithContentDescription("Schließen").assertIsDisplayed()
+    }
+
+    @Test
     fun exerciseCanBeRecordedFromTechniques() {
         val content = ApplicationProvider.getApplicationContext<StimmtrainingApp>().container.techniques
         val twang = content.technique("twang")!!
@@ -101,6 +130,8 @@ class AppSmokeTest {
     /** Sucht auch Texte innerhalb anklickbarer Karten und Buttons. */
     private fun text(value: String) = compose.onNode(hasText(value), true)
 
-    private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onAllNodesWithTextExists(text: String) =
-        onAllNodes(hasText(text), true).fetchSemanticsNodes().isNotEmpty()
+    private fun androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>.onAllNodesWithTextExists(
+        text: String,
+        substring: Boolean = false,
+    ) = onAllNodes(hasText(text, substring = substring), true).fetchSemanticsNodes().isNotEmpty()
 }

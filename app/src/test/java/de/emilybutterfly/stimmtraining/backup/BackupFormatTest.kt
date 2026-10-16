@@ -46,6 +46,40 @@ class BackupFormatTest {
     }
 
     @Test
+    fun documentRoundTrip() {
+        val withDocument = sample.copy(photoFile = null, documentFile = "${sample.uuid}_1.docx", documentName = "Nordwind.docx")
+        val json = BackupFormat.manifest(listOf(withDocument), createdAt = 1L, appVersion = "1.0")
+        assertEquals(withDocument.copy(id = 0), BackupFormat.parse(json).single().recording)
+    }
+
+    @Test
+    fun version1BackupsWithoutDocumentsStillParse() {
+        val json = JSONObject(BackupFormat.manifest(listOf(sample), 1L, "1.0")).put("version", 1)
+        val entry = json.getJSONArray("recordings").getJSONObject(0)
+        entry.remove("document")
+        entry.remove("documentName")
+        val parsed = BackupFormat.parse(json.toString()).single().recording
+        assertNull(parsed.documentFile)
+        assertNull(parsed.documentName)
+        assertEquals(sample.copy(id = 0), parsed)
+    }
+
+    @Test
+    fun unknownDocumentTypesAreDroppedAndNamesCleaned() {
+        val json = JSONObject(BackupFormat.manifest(listOf(sample), 1L, "1.0"))
+        val list = json.getJSONArray("recordings")
+        list.getJSONObject(0).put("document", "documents/x.exe").put("documentName", "x.exe")
+        list.put(JSONObject(list.getJSONObject(0).toString()).put("document", "documents/y.pdf").put("documentName", "Zeile\nzwei.pdf"))
+        list.put(JSONObject(list.getJSONObject(0).toString()).put("document", "documents/z.md").put("documentName", JSONObject.NULL))
+        val parsed = BackupFormat.parse(json.toString()).map { it.recording }
+        assertNull(parsed[0].documentFile)
+        assertNull(parsed[0].documentName)
+        assertEquals("y.pdf", parsed[1].documentFile)
+        assertEquals("Zeilezwei.pdf", parsed[1].documentName)
+        assertEquals("Text.md", parsed[2].documentName)
+    }
+
+    @Test
     fun rejectsForeignFiles() {
         assertThrows(BackupException::class.java) { BackupFormat.parse("""{"format":"other","recordings":[]}""") }
         assertThrows(BackupException::class.java) { BackupFormat.parse("kein json") }
@@ -62,6 +96,8 @@ class BackupFormatTest {
         assertEquals("manifest.json", BackupFormat.safeEntryName("manifest.json"))
         assertEquals("audio/a.m4a", BackupFormat.safeEntryName("audio/a.m4a"))
         assertEquals("photos/b.jpg", BackupFormat.safeEntryName("/photos/b.jpg"))
+        assertEquals("documents/c.pdf", BackupFormat.safeEntryName("documents/c.pdf"))
+        assertNull(BackupFormat.safeEntryName("documents/../c.pdf"))
         assertNull(BackupFormat.safeEntryName("audio/../../databases/x.db"))
         assertNull(BackupFormat.safeEntryName("audio/..\\..\\x"))
         assertNull(BackupFormat.safeEntryName("audio/sub/dir.m4a"))

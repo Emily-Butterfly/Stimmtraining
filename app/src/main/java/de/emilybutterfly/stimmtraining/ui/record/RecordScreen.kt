@@ -1,6 +1,8 @@
 package de.emilybutterfly.stimmtraining.ui.record
 
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -36,13 +38,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -56,6 +61,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -83,11 +89,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.ui.components.AttachmentReader
 import de.emilybutterfly.stimmtraining.ui.components.AudioPlayerBar
 import de.emilybutterfly.stimmtraining.ui.components.ParameterForm
-import de.emilybutterfly.stimmtraining.ui.components.PhotoSection
+import de.emilybutterfly.stimmtraining.ui.components.ReaderSizeButtons
+import de.emilybutterfly.stimmtraining.ui.components.TextAttachmentSection
+import de.emilybutterfly.stimmtraining.ui.components.formatBytes
 import de.emilybutterfly.stimmtraining.ui.components.formatDateTime
 import de.emilybutterfly.stimmtraining.ui.components.formatDuration
+import de.emilybutterfly.stimmtraining.ui.components.rememberReaderSettings
 import de.emilybutterfly.stimmtraining.ui.techniques.ExerciseDetails
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -105,6 +116,9 @@ fun RecordScreen(
     var confirmLeave by rememberSaveable { mutableStateOf(false) }
     var confirmRetake by rememberSaveable { mutableStateOf(false) }
     var permissionDenied by rememberSaveable { mutableStateOf(false) }
+    var readingMode by rememberSaveable { mutableStateOf(false) }
+    val reading = readingMode && state.attachment != null
+    val reader = rememberReaderSettings()
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.startRecording() else permissionDenied = true
@@ -117,7 +131,7 @@ fun RecordScreen(
 
     LaunchedEffect(state.message) {
         state.message?.let {
-            snackbar.showSnackbar(it)
+            snackbar.showSnackbar(it, duration = if (it.length > 80) SnackbarDuration.Long else SnackbarDuration.Short)
             viewModel.messageShown()
         }
     }
@@ -142,14 +156,29 @@ fun RecordScreen(
         }
     }
     BackHandler(enabled = state.hasDraft || state.saving) { requestClose() }
+    // Später registriert, hat also Vorrang: „Zurück“ beendet zuerst den Lesemodus.
+    BackHandler(enabled = reading) { readingMode = false }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Neue Aufnahme") },
+                title = { Text(if (reading) "Lesen" else "Neue Aufnahme") },
                 navigationIcon = {
                     IconButton(onClick = requestClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    }
+                },
+                actions = {
+                    val attachment = state.attachment
+                    if (reading && attachment is TextAttachment.Document) ReaderSizeButtons(reader, attachment.kind)
+                    if (attachment != null) {
+                        IconButton(onClick = { readingMode = !reading }) {
+                            if (reading) {
+                                Icon(Icons.Filled.CloseFullscreen, contentDescription = "Lesemodus beenden")
+                            } else {
+                                Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = "Lesemodus")
+                            }
+                        }
                     }
                 },
             )
@@ -167,6 +196,12 @@ fun RecordScreen(
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         if (!guideReady) return@Scaffold
+        val attachment = state.attachment
+        if (reading && attachment != null) {
+            // Der Text füllt den Platz zwischen Titelleiste und Aufnahme-Knöpfen.
+            AttachmentReader(attachment, reader, Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding))
+            return@Scaffold
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -178,14 +213,18 @@ fun RecordScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             guide?.let { GuideCard(it) }
-            PhotoSection(
-                photo = state.photo,
-                busy = state.photoBusy,
+            TextAttachmentSection(
+                attachment = attachment,
+                busy = state.attachmentBusy,
+                reader = reader,
                 cameraTarget = viewModel::cameraTarget,
                 onCameraResult = viewModel::onCameraPhoto,
-                onPicked = viewModel::onPhotoPicked,
-                onRemove = viewModel::removePhoto,
-                // Kamera oder Galerie würden die App in den Hintergrund schicken und die Aufnahme beenden.
+                onPhotoPicked = viewModel::onPhotoPicked,
+                onDocumentPicked = viewModel::onDocumentPicked,
+                onRemove = viewModel::removeAttachment,
+                onExpand = { readingMode = true },
+                onOpenExternally = { document -> viewModel.openExternally(document) { context.startActivity(it) } },
+                // Kamera, Galerie oder Dateiauswahl würden die App in den Hintergrund schicken und die Aufnahme beenden.
                 enabled = !state.isRecording,
             )
             ParameterForm(params = state.params, onChange = viewModel::updateParams)
@@ -212,7 +251,7 @@ fun RecordScreen(
         AlertDialog(
             onDismissRequest = { confirmRetake = false },
             title = { Text("Neu aufnehmen?") },
-            text = { Text("Die bisherige Aufnahme wird gelöscht. Foto und Angaben bleiben erhalten.") },
+            text = { Text("Die bisherige Aufnahme wird gelöscht. Text und Angaben bleiben erhalten.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmRetake = false
@@ -220,6 +259,18 @@ fun RecordScreen(
                 }) { Text("Löschen") }
             },
             dismissButton = { TextButton(onClick = { confirmRetake = false }) { Text("Abbrechen") } },
+        )
+    }
+
+    state.storageWarning?.let { warning ->
+        StorageWarningDialog(
+            warning = warning,
+            onRecordAnyway = { viewModel.startRecording(ignoreLowStorage = true) },
+            onManageStorage = {
+                viewModel.dismissStorageWarning()
+                openStorageSettings(context)
+            },
+            onDismiss = viewModel::dismissStorageWarning,
         )
     }
 
@@ -240,6 +291,56 @@ fun RecordScreen(
             },
             dismissButton = { TextButton(onClick = { permissionDenied = false }) { Text("Abbrechen") } },
         )
+    }
+}
+
+@Composable
+private fun StorageWarningDialog(
+    warning: StorageWarning,
+    onRecordAnyway: () -> Unit,
+    onManageStorage: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val free = formatBytes(warning.freeBytes)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.SdStorage, contentDescription = null) },
+        title = { Text(if (warning.full) "Speicher voll" else "Wenig Speicherplatz") },
+        text = {
+            if (warning.full) {
+                Text(
+                    "Auf dem Handy sind nur noch $free frei – zu wenig für eine Aufnahme. " +
+                        "Gib Speicher frei, z. B. indem du Videos auslagerst oder Apps entfernst, die du nicht brauchst.",
+                )
+            } else {
+                val minutes = if (warning.minutesLeft == 1L) "1 Minute" else "${warning.minutesLeft} Minuten"
+                Text(
+                    "Auf dem Handy sind nur noch $free frei. Das reicht für etwa $minutes Aufnahme. " +
+                        "Wird der Platz knapp, beendet die App die Aufnahme rechtzeitig, sodass sie erhalten bleibt.",
+                )
+            }
+        },
+        confirmButton = {
+            if (warning.full) {
+                TextButton(onClick = onManageStorage) { Text("Speicher verwalten") }
+            } else {
+                TextButton(onClick = onRecordAnyway) { Text("Trotzdem aufnehmen") }
+            }
+        },
+        dismissButton = {
+            Row {
+                if (!warning.full) TextButton(onClick = onManageStorage) { Text("Speicher verwalten") }
+                TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            }
+        },
+    )
+}
+
+private fun openStorageSettings(context: Context) {
+    try {
+        context.startActivity(Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS))
+    } catch (_: ActivityNotFoundException) {
+        context.startActivity(Intent(Settings.ACTION_SETTINGS))
     }
 }
 
@@ -327,7 +428,7 @@ private fun RecorderPanel(
                         }
                         Button(
                             onClick = onSave,
-                            enabled = !state.saving && !state.photoBusy,
+                            enabled = !state.saving && !state.attachmentBusy,
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(Icons.Filled.Check, contentDescription = null)

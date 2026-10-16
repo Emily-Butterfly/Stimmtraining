@@ -1,6 +1,7 @@
 package de.emilybutterfly.stimmtraining.ui.record
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
 import androidx.lifecycle.SavedStateHandle
@@ -12,11 +13,15 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import de.emilybutterfly.stimmtraining.AppContainer
 import de.emilybutterfly.stimmtraining.audio.AudioRecorder
 import de.emilybutterfly.stimmtraining.data.Exercise
+import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.RecordingParams
+import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.app
 import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
+import de.emilybutterfly.stimmtraining.ui.importDraftDocument
 import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
+import de.emilybutterfly.stimmtraining.ui.openWithChooser
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
 import kotlinx.coroutines.Dispatchers
@@ -33,14 +38,26 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import kotlin.math.max
 
 enum class RecorderPhase { Idle, Recording, Paused, Done }
 
+/**
+ * Hinweis vor dem Aufnehmen, dass der Speicher knapp ist. Bei [full] reicht er nicht einmal
+ * für eine kurze Aufnahme.
+ */
+data class StorageWarning(val freeBytes: Long, val full: Boolean) {
+    /** Etwa so viele Minuten lassen sich noch aufnehmen. */
+    val minutesLeft: Long
+        get() = ((freeBytes - FileStore.RESERVE_BYTES) / FileStore.AUDIO_BYTES_PER_MINUTE).coerceAtLeast(0)
+}
+
 data class RecordUiState(
     val params: RecordingParams = RecordingParams(),
-    val photo: File? = null,
-    val photoBusy: Boolean = false,
+    /** Der gelesene Text: Foto oder Datei. */
+    val attachment: TextAttachment? = null,
+    val attachmentBusy: Boolean = false,
     val phase: RecorderPhase = RecorderPhase.Idle,
     val elapsedMs: Long = 0,
     val level: Float = 0f,
@@ -52,11 +69,12 @@ data class RecordUiState(
     val message: String? = null,
     /** Ausgangswerte des Formulars, z. B. mit vorausgefüllter Übung. */
     val initialParams: RecordingParams = RecordingParams(),
+    val storageWarning: StorageWarning? = null,
 ) {
     val isRecording: Boolean get() = phase == RecorderPhase.Recording || phase == RecorderPhase.Paused
 
     val hasDraft: Boolean
-        get() = photo != null || phase != RecorderPhase.Idle || params != initialParams
+        get() = attachment != null || phase != RecorderPhase.Idle || params != initialParams
 }
 
 /** Die Übung aus „Techniken & Übungen“, mit der diese Aufnahme gestartet wurde. */
@@ -66,6 +84,7 @@ class RecordViewModel(
     private val app: Application,
     private val container: AppContainer,
     private val savedState: SavedStateHandle,
+    private val freeBytes: () -> Long = { container.files.freeBytes() },
 ) : ViewModel() {
     private val recorder = AudioRecorder(app)
     private val hadSavedParams = savedState.contains("$KEY_PARAMS.title")
@@ -128,6 +147,8 @@ class RecordViewModel(
         val params: RecordingParams,
         val initialParams: RecordingParams,
         val photo: String?,
+        val document: String?,
+        val documentName: String?,
         val audio: String?,
         val recordedAt: Long?,
         val durationMs: Long,
@@ -138,7 +159,9 @@ class RecordViewModel(
         return Persistable(
             params = state.params,
             initialParams = state.initialParams,
-            photo = state.photo?.absolutePath,
+            photo = (state.attachment as? TextAttachment.Photo)?.file?.absolutePath,
+            document = (state.attachment as? TextAttachment.Document)?.file?.absolutePath,
+            documentName = (state.attachment as? TextAttachment.Document)?.name,
             audio = if (done) state.audio?.absolutePath else null,
             recordedAt = if (done) state.recordedAt else null,
             durationMs = if (done) state.durationMs else 0,
@@ -149,6 +172,8 @@ class RecordViewModel(
         savedState.putParams(KEY_PARAMS, p.params)
         savedState.putParams(KEY_INITIAL_PARAMS, p.initialParams)
         savedState[KEY_PHOTO] = p.photo
+        savedState[KEY_DOCUMENT] = p.document
+        savedState[KEY_DOCUMENT_NAME] = p.documentName
         savedState[KEY_AUDIO] = p.audio
         savedState[KEY_RECORDED_AT] = p.recordedAt
         savedState[KEY_DURATION] = p.durationMs
@@ -157,14 +182,14 @@ class RecordViewModel(
     private fun restore(): RecordUiState {
         val params = savedState.getParams(KEY_PARAMS)
         val initialParams = savedState.getParams(KEY_INITIAL_PARAMS)
-        val photo = savedState.get<String>(KEY_PHOTO)?.let(::File)?.takeIf { it.isFile }
+        val attachment = restoreAttachment()
         val audio = savedState.get<String>(KEY_AUDIO)?.let(::File)?.takeIf { it.isFile && it.length() > 0 }
-            ?: return RecordUiState(params = params, photo = photo, initialParams = initialParams)
+            ?: return RecordUiState(params = params, attachment = attachment, initialParams = initialParams)
         val duration = savedState[KEY_DURATION] ?: 0L
         return RecordUiState(
             params = params,
             initialParams = initialParams,
-            photo = photo,
+            attachment = attachment,
             phase = RecorderPhase.Done,
             audio = audio,
             recordedAt = savedState[KEY_RECORDED_AT],
@@ -173,44 +198,79 @@ class RecordViewModel(
         )
     }
 
+    private fun restoreAttachment(): TextAttachment? {
+        savedState.get<String>(KEY_DOCUMENT)?.let(::File)?.takeIf { it.isFile }?.let { file ->
+            return TextAttachment.Document(file, savedState.get<String>(KEY_DOCUMENT_NAME) ?: file.name)
+        }
+        return savedState.get<String>(KEY_PHOTO)?.let(::File)?.takeIf { it.isFile }?.let { TextAttachment.Photo(it) }
+    }
+
     fun updateParams(params: RecordingParams) = _state.update { it.copy(params = params) }
 
-    // --- Foto ---
+    // --- Text: Foto oder Datei ---
 
     fun cameraTarget(): Uri = container.files.prepareCameraCapture()
 
-    fun onCameraPhoto() = importPhoto { container.files.importCameraCapture(app) }
+    fun onCameraPhoto() = importAttachment(isPhoto = true) { TextAttachment.Photo(container.files.importCameraCapture(app)) }
 
-    fun onPhotoPicked(uri: Uri) = importPhoto { container.files.importDraftPhoto(app, uri) }
+    fun onPhotoPicked(uri: Uri) = importAttachment(isPhoto = true) { TextAttachment.Photo(container.files.importDraftPhoto(app, uri)) }
 
-    private fun importPhoto(load: suspend () -> File) {
+    fun onDocumentPicked(uri: Uri) = importAttachment(isPhoto = false) { container.files.importDraftDocument(app, uri) }
+
+    private fun importAttachment(isPhoto: Boolean, load: suspend () -> TextAttachment) {
         viewModelScope.launch {
-            _state.update { it.copy(photoBusy = true) }
+            _state.update { it.copy(attachmentBusy = true) }
             try {
-                val photo = load()
-                val previous = _state.value.photo
-                _state.update { it.copy(photo = photo, photoBusy = false) }
-                previous?.delete()
+                val attachment = load()
+                val previous = _state.value.attachment
+                _state.update { it.copy(attachment = attachment, attachmentBusy = false) }
+                previous?.file?.delete()
             } catch (e: Exception) {
-                _state.update {
-                    it.copy(photoBusy = false, message = "Foto konnte nicht übernommen werden: ${e.message}")
-                }
+                _state.update { it.copy(attachmentBusy = false, message = importFailure(isPhoto, e)) }
             }
         }
     }
 
-    fun removePhoto() {
-        _state.value.photo?.delete()
-        _state.update { it.copy(photo = null) }
+    fun removeAttachment() {
+        _state.value.attachment?.file?.delete()
+        _state.update { it.copy(attachment = null) }
+    }
+
+    /** Bereitet das Öffnen der Datei in einer anderen App vor (nicht während einer Aufnahme). */
+    fun openExternally(document: TextAttachment.Document, onReady: (Intent) -> Unit) {
+        if (_state.value.isRecording) return
+        viewModelScope.launch {
+            try {
+                onReady(container.files.openWithChooser(document))
+            } catch (e: Exception) {
+                _state.update { it.copy(message = "Die Datei lässt sich nicht öffnen: ${e.message}") }
+            }
+        }
     }
 
     // --- Aufnahme ---
 
-    fun startRecording() {
+    /**
+     * Startet die Aufnahme. Ist der Speicher knapp, erscheint zuerst ein Hinweis
+     * ([RecordUiState.storageWarning]); mit [ignoreLowStorage] wird trotzdem aufgenommen.
+     */
+    fun startRecording(ignoreLowStorage: Boolean = false) {
         if (_state.value.phase != RecorderPhase.Idle || recorder.isActive) return
+        val free = freeBytes()
+        val budget = free - FileStore.RESERVE_BYTES
+        if (budget < MIN_RECORDING_BYTES) {
+            _state.update { it.copy(storageWarning = StorageWarning(free, full = true)) }
+            return
+        }
+        if (!ignoreLowStorage && free < FileStore.LOW_STORAGE_BYTES) {
+            _state.update { it.copy(storageWarning = StorageWarning(free, full = false)) }
+            return
+        }
+        _state.update { it.copy(storageWarning = null) }
         val file = container.files.newDraftFile("m4a")
         try {
-            recorder.start(file)
+            // Bevor der Speicher vollläuft, endet die Aufnahme sauber und bleibt abspielbar.
+            recorder.start(file, maxBytes = budget.coerceAtMost(MAX_RECORDING_BYTES), onLimitReached = ::onStorageLimitReached)
         } catch (e: Exception) {
             file.delete()
             _state.update { it.copy(message = "Aufnahme konnte nicht gestartet werden: ${e.message}") }
@@ -230,6 +290,18 @@ class RecordViewModel(
             )
         }
         startTicker()
+    }
+
+    fun dismissStorageWarning() = _state.update { it.copy(storageWarning = null) }
+
+    private fun onStorageLimitReached() {
+        if (!_state.value.isRecording) return
+        stopRecording()
+        if (_state.value.phase == RecorderPhase.Done) {
+            _state.update {
+                it.copy(message = "Der Speicher ist fast voll – die Aufnahme wurde beendet. Du kannst sie anhören und speichern.")
+            }
+        }
     }
 
     fun pauseOrResume() {
@@ -266,7 +338,10 @@ class RecordViewModel(
         val file = recordingFile
         recordingFile = null
         val ok = recorder.stop()
-        if (!ok || file == null || !file.isFile || file.length() == 0L) {
+        // Hat Android die Aufnahme schon selbst beendet (Speichergrenze), kann stop() scheitern,
+        // obwohl die Datei vollständig ist.
+        val usable = file != null && file.isFile && file.length() > 0 && (ok || AudioRecorder.durationOf(file) != null)
+        if (!usable) {
             file?.delete()
             _state.update {
                 it.copy(
@@ -319,23 +394,23 @@ class RecordViewModel(
         }
     }
 
-    /** Verwirft den ganzen Entwurf: Aufnahme und Foto. */
+    /** Verwirft den ganzen Entwurf: Aufnahme und Text. */
     fun discardDraft() {
         discardRecording()
-        removePhoto()
+        removeAttachment()
     }
 
     fun save(onSaved: (Long) -> Unit) {
         val current = _state.value
         val audio = current.audio ?: return
-        if (current.saving || current.photoBusy) return
+        if (current.saving || current.attachmentBusy) return
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             try {
                 val id = withContext(NonCancellable) {
                     container.repository.create(
                         draftAudio = audio,
-                        draftPhoto = current.photo,
+                        draftAttachment = current.attachment,
                         recordedAt = current.recordedAt ?: System.currentTimeMillis(),
                         durationMs = current.durationMs,
                         params = current.params,
@@ -380,9 +455,23 @@ class RecordViewModel(
         const val ARG_TECHNIQUE = "technique"
         const val ARG_EXERCISE = "exercise"
         internal const val KEY_PHOTO = "photo"
+        internal const val KEY_DOCUMENT = "document"
+        internal const val KEY_DOCUMENT_NAME = "documentName"
         internal const val KEY_AUDIO = "audio"
         internal const val KEY_RECORDED_AT = "recordedAt"
         internal const val KEY_DURATION = "durationMs"
+
+        /** Darunter lohnt keine Aufnahme mehr: etwa eine Minute. */
+        private const val MIN_RECORDING_BYTES = FileStore.AUDIO_BYTES_PER_MINUTE
+
+        /** MP4-Dateien sind auf manchen Geräten auf 4 GB begrenzt; 2 GB sind über 30 Stunden. */
+        private const val MAX_RECORDING_BYTES = 2L shl 30
+
+        private fun importFailure(isPhoto: Boolean, e: Exception): String = when {
+            isPhoto -> "Foto konnte nicht übernommen werden: ${e.message}"
+            e is IOException && !e.message.isNullOrBlank() -> e.message!!
+            else -> "Die Datei konnte nicht übernommen werden."
+        }
 
         val Factory = viewModelFactory {
             initializer {

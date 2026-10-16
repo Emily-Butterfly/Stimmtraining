@@ -9,6 +9,7 @@ import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
+import de.emilybutterfly.stimmtraining.data.TextAttachment
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -62,7 +63,7 @@ class BackupRoundTripTest {
         val photo = ByteArray(800) { (it * 3).toByte() }
         repository.create(
             draftAudio = draft("m4a", audioA),
-            draftPhoto = draft("jpg", photo),
+            draftAttachment = TextAttachment.Photo(draft("jpg", photo)),
             recordedAt = 1_791_000_000_000,
             durationMs = 61_000,
             params = RecordingParams(
@@ -76,14 +77,22 @@ class BackupRoundTripTest {
             ),
         )
         repository.create(draft("m4a", audioB), null, 1_791_100_000_000, 12_000, RecordingParams())
+        val document = "Der Nordwind und die Sonne stritten sich.".toByteArray()
+        repository.create(
+            draft("m4a", audioB),
+            TextAttachment.Document(draft("txt", document), "Nordwind und Sonne.txt"),
+            1_791_200_000_000,
+            15_000,
+            RecordingParams(exercise = "Text lesen"),
+        )
         val before = db.recordingDao().getAll()
 
         val zip = ByteArrayOutputStream()
-        assertEquals(2, manager.export(zip))
+        assertEquals(3, manager.export(zip))
 
         openFreshDevice()
         val result = manager.import(ByteArrayInputStream(zip.toByteArray()))
-        assertEquals(ImportResult(imported = 2, skipped = 0, incomplete = 0), result)
+        assertEquals(ImportResult(imported = 3, skipped = 0, incomplete = 0), result)
 
         val after = db.recordingDao().getAll()
         assertEquals(before.map(::comparable), after.map(::comparable))
@@ -91,11 +100,14 @@ class BackupRoundTripTest {
         assertArrayEquals(photo, files.photo(assertNotNull(after[0].photoFile)).readBytes())
         assertArrayEquals(audioB, files.audio(after[1].audioFile).readBytes())
         assertNull(after[1].photoFile)
+        assertNull(after[1].documentFile)
+        assertEquals("Nordwind und Sonne.txt", after[2].documentName)
+        assertArrayEquals(document, files.document(assertNotNull(after[2].documentFile)).readBytes())
 
         // Ein zweites Einspielen derselben Sicherung legt nichts doppelt an.
         val again = manager.import(ByteArrayInputStream(zip.toByteArray()))
-        assertEquals(ImportResult(imported = 0, skipped = 2, incomplete = 0), again)
-        assertEquals(2, db.recordingDao().getAll().size)
+        assertEquals(ImportResult(imported = 0, skipped = 3, incomplete = 0), again)
+        assertEquals(3, db.recordingDao().getAll().size)
     }
 
     @Test
@@ -114,7 +126,7 @@ class BackupRoundTripTest {
 
     @Test
     fun deleteRemovesFiles() = runBlocking {
-        val id = repository.create(draft("m4a", byteArrayOf(1, 2, 3)), draft("jpg", byteArrayOf(4)), 1L, 1L, RecordingParams())
+        val id = repository.create(draft("m4a", byteArrayOf(1, 2, 3)), TextAttachment.Photo(draft("jpg", byteArrayOf(4))), 1L, 1L, RecordingParams())
         val recording = assertNotNull(db.recordingDao().get(id))
         repository.delete(recording)
         assertEquals(false, files.audio(recording.audioFile).exists())
@@ -122,7 +134,8 @@ class BackupRoundTripTest {
     }
 
     /** Alles außer den gerätespezifischen Werten (ID, Dateinamen). */
-    private fun comparable(r: Recording) = r.copy(id = 0, audioFile = "", photoFile = r.photoFile?.let { "photo" })
+    private fun comparable(r: Recording) =
+        r.copy(id = 0, audioFile = "", photoFile = r.photoFile?.let { "photo" }, documentFile = r.documentFile?.let { "document" })
 
     private fun <T> assertNotNull(value: T?): T {
         assertNotNull(null as String?, value)

@@ -1,6 +1,7 @@
 package de.emilybutterfly.stimmtraining.ui
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
@@ -9,6 +10,8 @@ import de.emilybutterfly.stimmtraining.StimmtrainingApp
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.ImageImporter
 import de.emilybutterfly.stimmtraining.data.RecordingParams
+import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.document.DocumentImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -63,4 +66,13 @@ suspend fun FileStore.importCameraCapture(context: Context): File {
     } finally {
         capture.delete()
     }
+}
+
+/** Übernimmt eine Datei (PDF, Word, Text, …) als Entwurf. */
+suspend fun FileStore.importDraftDocument(context: Context, source: Uri): TextAttachment.Document =
+    withContext(Dispatchers.IO) { DocumentImporter.import(context.contentResolver, this@importDraftDocument, source) }
+
+/** Ein „Öffnen mit …“-Dialog für ein Dokument. */
+suspend fun FileStore.openWithChooser(document: TextAttachment.Document): Intent = withContext(Dispatchers.IO) {
+    Intent.createChooser(viewIntent(document.file, document.name, document.kind.mimeType), "Öffnen mit")
 }

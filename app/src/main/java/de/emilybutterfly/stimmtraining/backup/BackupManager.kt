@@ -44,7 +44,7 @@ class BackupManager(
     suspend fun export(output: OutputStream): Int = withContext(Dispatchers.IO) {
         val recordings = dao.getAll()
         val zip = ZipOutputStream(BufferedOutputStream(output))
-        // Audio (AAC) und Fotos (JPEG) sind bereits komprimiert.
+        // Audio (AAC), Fotos (JPEG) und die meisten Dokumente sind bereits komprimiert.
         zip.setLevel(Deflater.BEST_SPEED)
         zip.putNextEntry(ZipEntry(BackupFormat.MANIFEST))
         val manifest = BackupFormat.manifest(recordings, System.currentTimeMillis(), BuildConfig.VERSION_NAME)
@@ -53,6 +53,7 @@ class BackupManager(
         for (recording in recordings) {
             addFile(zip, BackupFormat.AUDIO_DIR + recording.audioFile, files.audio(recording.audioFile))
             recording.photoFile?.let { addFile(zip, BackupFormat.PHOTO_DIR + it, files.photo(it)) }
+            recording.documentFile?.let { addFile(zip, BackupFormat.DOCUMENT_DIR + it, files.document(it)) }
         }
         zip.finish()
         zip.flush()
@@ -124,7 +125,22 @@ class BackupManager(
                 val photoName = photo?.let { source ->
                     RecordingRepository.newPhotoName(recording.uuid).also { FileStore.move(source, files.photo(it)) }
                 }
-                dao.insert(recording.copy(id = 0, audioFile = audioName, photoFile = photoName))
+                val document = recording.documentFile
+                    ?.let { File(staging, BackupFormat.DOCUMENT_DIR + it) }
+                    ?.takeIf { it.isFile }
+                val documentName = document?.let { source ->
+                    RecordingRepository.newDocumentName(recording.uuid, source.extension.lowercase())
+                        .also { FileStore.move(source, files.document(it)) }
+                }
+                dao.insert(
+                    recording.copy(
+                        id = 0,
+                        audioFile = audioName,
+                        photoFile = photoName,
+                        documentFile = documentName,
+                        documentName = recording.documentName.takeIf { documentName != null },
+                    ),
+                )
                 imported++
             }
             ImportResult(imported, skipped, incomplete)

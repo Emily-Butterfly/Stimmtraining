@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -44,7 +45,7 @@ class RecordingRepositoryTest {
         db.close() // jede Datenbankoperation schlägt jetzt fehl
 
         try {
-            repository.create(audio, photo, 1L, 1L, RecordingParams())
+            repository.create(audio, TextAttachment.Photo(photo), 1L, 1L, RecordingParams())
             fail("Speichern hätte fehlschlagen müssen")
         } catch (_: Exception) {
         }
@@ -56,11 +57,80 @@ class RecordingRepositoryTest {
     }
 
     @Test
+    fun failedSaveAlsoKeepsADocumentDraft() = runBlocking {
+        val audio = files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1)) }
+        val document = files.newDraftFile("pdf").apply { writeBytes(byteArrayOf(2)) }
+        db.close()
+
+        runCatching { repository.create(audio, TextAttachment.Document(document, "Nordwind.pdf"), 1L, 1L, RecordingParams()) }
+
+        assertTrue("Audio-Entwurf ist wieder da", audio.isFile)
+        assertTrue("Dokument-Entwurf ist wieder da", document.isFile)
+        assertEquals(0, files.documentDir.listFiles()?.size ?: 0)
+    }
+
+    @Test
+    fun documentCanBeSavedSwappedForAPhotoAndRemoved() = runBlocking {
+        val draft = files.newDraftFile("pdf").apply { writeBytes(byteArrayOf(7, 7)) }
+        val id = repository.create(
+            files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1)) },
+            TextAttachment.Document(draft, "Nordwind und Sonne.pdf"),
+            1L,
+            1L,
+            RecordingParams(),
+        )
+        val saved = db.recordingDao().get(id)!!
+        val document = files.document(saved.documentFile!!)
+        assertNull(saved.photoFile)
+        assertEquals("pdf", document.extension)
+        assertTrue(document.readBytes().contentEquals(byteArrayOf(7, 7)))
+        assertEquals(TextAttachment.Document(document, "Nordwind und Sonne.pdf"), repository.attachmentOf(saved))
+
+        // Ein Foto ersetzt das Dokument; die alte Datei verschwindet.
+        val photo = files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(3)) }
+        repository.update(id, saved.params(), AttachmentChange.Replace(TextAttachment.Photo(photo)))
+        val withPhoto = db.recordingDao().get(id)!!
+        assertNull(withPhoto.documentFile)
+        assertNull(withPhoto.documentName)
+        assertTrue(files.photo(withPhoto.photoFile!!).isFile)
+        assertFalse("altes Dokument gelöscht", document.exists())
+
+        // Und wieder zurück zu einer Datei.
+        val text = files.newDraftFile("txt").apply { writeText("Der Nordwind") }
+        repository.update(id, saved.params(), AttachmentChange.Replace(TextAttachment.Document(text, "Nordwind.txt")))
+        val withText = db.recordingDao().get(id)!!
+        assertNull(withText.photoFile)
+        assertFalse("altes Foto gelöscht", files.photo(withPhoto.photoFile!!).exists())
+        assertEquals("Nordwind.txt", withText.documentName)
+        assertEquals("Der Nordwind", files.document(withText.documentFile!!).readText())
+
+        repository.update(id, saved.params(), AttachmentChange.Remove)
+        val without = db.recordingDao().get(id)!!
+        assertNull(without.documentFile)
+        assertNull(repository.attachmentOf(without))
+        assertEquals(0, files.documentDir.listFiles()?.size ?: 0)
+    }
+
+    @Test
+    fun deletingARecordingDeletesItsDocument() = runBlocking {
+        val id = repository.create(
+            files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1)) },
+            TextAttachment.Document(files.newDraftFile("docx").apply { writeBytes(byteArrayOf(2)) }, "Text.docx"),
+            1L,
+            1L,
+            RecordingParams(),
+        )
+        repository.delete(db.recordingDao().get(id)!!)
+        assertEquals(0, files.documentDir.listFiles()?.size ?: 0)
+        assertEquals(0, files.audioDir.listFiles()?.size ?: 0)
+    }
+
+    @Test
     fun missingPhotoDraftDoesNotCostTheRecording() = runBlocking {
         val audio = files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         val vanishedPhoto = files.newDraftFile("jpg")
 
-        val id = repository.create(audio, vanishedPhoto, 1L, 1L, RecordingParams(title = "ohne Foto"))
+        val id = repository.create(audio, TextAttachment.Photo(vanishedPhoto), 1L, 1L, RecordingParams(title = "ohne Foto"))
 
         val saved = db.recordingDao().get(id)!!
         assertEquals("ohne Foto", saved.title)
@@ -72,7 +142,7 @@ class RecordingRepositoryTest {
     fun replacingThePhotoDeletesTheOldOne() = runBlocking {
         val id = repository.create(
             files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1)) },
-            files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(2)) },
+            TextAttachment.Photo(files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(2)) }),
             1L,
             1L,
             RecordingParams(),
@@ -80,7 +150,7 @@ class RecordingRepositoryTest {
         val before = db.recordingDao().get(id)!!
         val newPhoto = files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(3)) }
 
-        repository.update(id, before.params().copy(notes = "neu"), PhotoChange.Replace(newPhoto))
+        repository.update(id, before.params().copy(notes = "neu"), AttachmentChange.Replace(TextAttachment.Photo(newPhoto)))
 
         val after = db.recordingDao().get(id)!!
         assertEquals("neu", after.notes)

@@ -13,7 +13,13 @@ class AudioRecorder(private val context: Context) {
 
     val isActive: Boolean get() = recorder != null
 
-    fun start(output: File) {
+    /**
+     * Startet die Aufnahme nach [output]. Erreicht die Datei [maxBytes], beendet Android die
+     * Aufnahme selbst (die Datei bleibt abspielbar) und ruft [onLimitReached] auf dem
+     * Hauptthread auf; danach muss [stop] aufgerufen werden. So endet eine Aufnahme sauber,
+     * bevor der Speicher vollläuft.
+     */
+    fun start(output: File, maxBytes: Long = 0, onLimitReached: () -> Unit = {}) {
         check(recorder == null) { "Aufnahme läuft bereits" }
         val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
@@ -29,6 +35,12 @@ class AudioRecorder(private val context: Context) {
             r.setAudioSamplingRate(44_100)
             r.setAudioEncodingBitRate(128_000)
             r.setOutputFile(output.absolutePath)
+            if (maxBytes > 0) {
+                r.setMaxFileSize(maxBytes)
+                r.setOnInfoListener { _, what, _ ->
+                    if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED) onLimitReached()
+                }
+            }
             r.prepare()
             r.start()
         } catch (e: Exception) {

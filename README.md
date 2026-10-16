@@ -15,13 +15,24 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
   - stimmliche Tagesform (1–5)
   - Zufriedenheit mit der Aufnahme (1–5)
   - Titel/Text und Notizen
-- **Foto vom Text**: mit der Kamera aufnehmen oder aus der Galerie wählen. Es wird beim
-  Aufnehmen angezeigt (zum Ablesen) und lässt sich im Vollbild zoomen. Fotos werden automatisch
-  richtig gedreht und verkleinert.
+- **Text zum Lesen**, wahlweise
+  - als **Foto**: mit der Kamera aufnehmen oder aus der Galerie wählen. Fotos werden
+    automatisch richtig gedreht und verkleinert.
+  - als **Datei**: PDF, Word (.docx), OpenDocument (.odt), RTF, HTML, Markdown (.md) oder
+    Text (.txt), bis 50 MB. Das Format erkennt die App am Inhalt. Alte Word-Dateien (.doc)
+    gehen nicht – in Word oder LibreOffice als .docx oder PDF speichern.
+
+  Der Text wird beim Aufnehmen angezeigt. Schriftgröße bzw. PDF-Zoom lassen sich mit Knöpfen
+  oder zwei Fingern einstellen; die Schriftgröße merkt sich die App. Der **Lesemodus** zeigt
+  den Text auf dem ganzen Bildschirm, die Aufnahme-Knöpfe bleiben sichtbar. Dateien lassen
+  sich außerdem in einer anderen App öffnen.
+- **Speicherplatz**: Sind weniger als 50 MB frei, weist die App vor dem Aufnehmen darauf hin
+  (mit der ungefähren Aufnahmezeit, die noch passt). Wird der Speicher während einer Aufnahme
+  knapp, endet sie rechtzeitig und bleibt abspielbar. Eine Minute Aufnahme braucht knapp 1 MB.
 - **Übersicht** aller Aufnahmen nach Tagen, mit Detailansicht, Bearbeiten, Teilen und Löschen.
 - **Backups**:
-  - *Backup erstellen*: alle Aufnahmen, Fotos und Angaben als ZIP-Datei an einem Ort deiner
-    Wahl speichern (z. B. Google Drive, Downloads, USB-Stick).
+  - *Backup erstellen*: alle Aufnahmen, Fotos, Dateien und Angaben als ZIP-Datei an einem Ort
+    deiner Wahl speichern (z. B. Google Drive, Downloads, USB-Stick).
   - *Backup wiederherstellen*: ergänzt nur fehlende Aufnahmen, überschreibt oder löscht nichts.
     Damit klappt auch der Umzug auf ein neues Handy.
   - *Automatisches Backup*: täglich oder wöchentlich in einen gewählten Ordner, nur wenn sich
@@ -78,18 +89,23 @@ vorher in der App ein Backup erstellen, danach wiederherstellen.
 - `minSdk` 26 (Android 8.0), `targetSdk` 36
 - Bauen und testen: `./gradlew testDebugUnitTest assembleDebug`
 - Die Tests (Robolectric) prüfen u. a. ein vollständiges Backup → neues Gerät → Wiederherstellen
-  mit echter Datenbank, den Foto-Import (Drehung, Verkleinerung), dass ein fehlgeschlagenes
-  Speichern nichts verliert, dass ein Entwurf das Beenden der App übersteht, die Rotation der
-  automatischen Backups, und sie öffnen jede Ansicht der App einmal.
+  mit echter Datenbank, das Datenbank-Update von Version 1 auf 2, den Foto-Import (Drehung,
+  Verkleinerung), Erkennen und Lesen aller Dateiformate, dass ein fehlgeschlagenes Speichern
+  nichts verliert, dass ein Entwurf das Beenden der App übersteht, die Speicherplatz-Warnung,
+  die Rotation der automatischen Backups, und sie öffnen jede Ansicht der App einmal.
+- Änderungen an der Datenbank brauchen eine neue Version mit Migration in `AppDatabase`; das
+  Schema jeder Version liegt unter `app/schemas/` und gehört ins Repository.
 
 ### Aufbau
 
 ```
 app/src/main/java/de/emilybutterfly/stimmtraining/
   data/      Room-Datenbank, Dateiablage, Foto-Import
+  data/document/  Dateien als Text: Formate erkennen, Text lesen, PDF-Seiten rendern
   audio/     Aufnahme (MediaRecorder)
   backup/    ZIP-Format, Export/Import, automatisches Backup
   ui/        Compose-Ansichten: Liste, Aufnahme, Detail, Backup
 ```
 
-Format der Sicherung: `manifest.json` (alle Aufnahmen mit Parametern), `audio/…`, `photos/…`.
+Format der Sicherung: `manifest.json` (alle Aufnahmen mit Parametern), `audio/…`, `photos/…`,
+`documents/…` (seit Format-Version 2; ältere Sicherungen lassen sich weiterhin einspielen).
