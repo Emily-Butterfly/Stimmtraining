@@ -1,28 +1,1071 @@
 {
   "techniques": [
     {
-      "id": "twang",
-      "title": "Twang",
-      "subtitle": "Platzhalter",
-      "focus": true,
-      "intro": "Platzhalter.",
-      "why": "Platzhalter.",
-      "howToFind": ["Platzhalter"],
-      "examples": ["nja-nja-nja"],
+      "id": "aufwaermen",
+      "title": "Aufwärmen",
+      "subtitle": "Strohhalm, Lippenflattern, Summen und sanfte Gleiter",
+      "focus": false,
+      "intro": "Beim Aufwärmen bereitest du Atem, Stimmlippen und Muskeln sanft auf das Training vor. Besonders schonend sind Übungen, bei denen der Luftweg vorn teilweise verengt ist: Tönen durch einen Strohhalm, Lippenflattern und Summen. Fachleute nennen sie SOVT-Übungen (semi-occluded vocal tract, also teilweise verschlossenes Ansatzrohr). Dazu kommen sanfte Gleiter, bei denen du stufenlos von tief nach hoch und zurück gleitest.",
+      "why": "Wenn du deine Stimme auf neue Weise benutzt, kann das anfangs ermüden. Ein kurzes Aufwärmen macht die Stimme beweglicher und senkt die Gefahr, zu drücken. Beim Strohhalm entsteht ein leichter Gegendruck im Mund, der die Stimmlippen entlastet und eine leichte, sparsame Schwingung unterstützt. Ganz erforscht ist das noch nicht, die Übungen gelten aber als sicher und werden in der Stimmtherapie viel genutzt.",
+      "howToFind": [
+        "Du spürst ein Kribbeln oder Vibrieren an Lippen, Nase oder Wangen.",
+        "Der Hals fühlt sich weit und locker an, nichts drückt.",
+        "Der Ton läuft fast von allein, ohne Anstrengung.",
+        "Beim Gleiten darf es kleine Knicke geben. Du überspielst sie nicht mit Kraft.",
+        "Schultern bleiben unten, der Kiefer ist locker."
+      ],
+      "examples": [
+        "Strohhalm auf „uuu“",
+        "Lippenflattern „brrr“",
+        "Summen „mmm“",
+        "Gleiter auf „ng“ wie am Ende von „Ding“",
+        "mmm-ma, mmm-mi, mmm-mo",
+        "Mama, Mimi, Melone, Nina, Nudeln",
+        "Meine Mama mag Melonen."
+      ],
       "exercises": [
         {
-          "id": "hexenlachen",
-          "title": "Hexenlachen",
-          "goal": "Platzhalter",
+          "id": "aufwaermen-strohhalm",
+          "title": "Tönen durch den Strohhalm",
+          "goal": "Die Stimme mit wenig Kraft in Schwung bringen und Druck im Hals abbauen.",
           "duration": "2–3 Minuten",
-          "steps": ["Schritt 1", "Schritt 2"],
-          "examples": ["hihihi"],
-          "checks": ["Kein Druck im Hals"]
+          "steps": [
+            "Nimm vor dem Aufwärmen einen kurzen Satz auf, zum Beispiel „Meine Mama mag Melonen.“",
+            "Nimm einen Trinkhalm locker zwischen die Lippen. Ein dünnerer Halm gibt etwas mehr Widerstand.",
+            "Atme ruhig ein und lass einen bequemen Ton auf „uuu“ durch den Halm laufen. Die Luft geht nur durch den Halm.",
+            "Halte den Ton ein paar Sekunden, ohne lauter zu werden. Dann kurz Pause.",
+            "Gleite sanft von tief nach hoch und zurück, wie eine leise Sirene. Etwa zehnmal.",
+            "Summe zum Schluss eine einfache Melodie durch den Halm, zum Beispiel „Alle meine Entchen“.",
+            "Variante: Halte den Halm nur wenige Zentimeter tief in ein Glas Wasser und töne mit gleichmäßigen Blubberblasen.",
+            "Nimm danach denselben Satz noch einmal auf. So hörst du, ob das Aufwärmen deinen Klang verändert."
+          ],
+          "examples": [
+            "„uuu“ durch den Halm",
+            "Sirene: tief – hoch – tief",
+            "Melodie: Alle meine Entchen",
+            "Davor und danach: Meine Mama mag Melonen."
+          ],
+          "checks": [
+            "Die Lippen schließen dicht um den Halm, die Wangen blähen sich kaum auf.",
+            "Es vibriert an den Lippen, der Hals bleibt locker.",
+            "Du wirst beim Hochgleiten nicht lauter.",
+            "Nach der Übung fühlt sich die Stimme leichter an, nicht müder."
+          ]
+        },
+        {
+          "id": "aufwaermen-lippen-summen",
+          "title": "Lippenflattern und Summen",
+          "goal": "Atem und Ton verbinden und die Vibration vorn im Gesicht spüren.",
+          "duration": "2–3 Minuten",
+          "steps": [
+            "Lass die Lippen locker aufeinanderliegen und blase Luft hindurch, bis sie flattern wie beim Pferdeschnauben.",
+            "Klappt es nicht, drück mit zwei Fingern die Wangen neben den Mundwinkeln sanft nach innen.",
+            "Gib einen leichten Ton dazu: „brrr“. Gleite damit langsam hoch und runter.",
+            "Wechsle zum Summen auf „mmm“. Die Lippen liegen locker aufeinander, die Zähne sind leicht geöffnet.",
+            "Öffne das Summen in Silben: „mmm-ma“, „mmm-mi“, „mmm-mo“.",
+            "Sprich dann ein paar Wörter mit m und n und halte das Vibrieren vorn."
+          ],
+          "examples": [
+            "brrr auf und ab",
+            "mmm-ma, mmm-mi, mmm-mo",
+            "Mama, Mimi, Melone, Nina, Nudeln",
+            "Meine Mama mag Melonen."
+          ],
+          "checks": [
+            "Die Lippen kitzeln oder vibrieren.",
+            "Der Ton reißt nicht ab und du presst nicht.",
+            "Das Summen fühlt sich eher vorn im Gesicht an als tief im Hals."
+          ]
+        },
+        {
+          "id": "aufwaermen-gleiter",
+          "title": "Sanfte Gleiter",
+          "goal": "Deinen Tonumfang beweglich machen, ohne die Höhe zu erzwingen.",
+          "duration": "2 Minuten",
+          "steps": [
+            "Sag „ng“ wie am Ende von „Ding“ und halte den Klang.",
+            "Gleite zuerst nur ein kleines Stück hoch und wieder runter.",
+            "Mach die Gleiter Schritt für Schritt größer. Oben wird der Ton leiser und dünner, das ist in Ordnung.",
+            "Zeichne die Bewegung mit der Hand in die Luft, wie eine Welle oder eine Achterbahn.",
+            "Hör auf, bevor es oben eng wird. Die höchsten Töne musst du nicht erreichen.",
+            "Nimm ab und zu einen Gleiter auf. Über die Wochen hörst du, wie viel leichter er geht."
+          ],
+          "examples": [
+            "ng-Sirene",
+            "uuu-Sirene",
+            "Welle: tief – hoch – tief",
+            "Achterbahn mit zwei Hügeln"
+          ],
+          "checks": [
+            "Der Hals bleibt weich, auch oben.",
+            "Knicke darfst du hören, du drückst nicht darüber hinweg.",
+            "Kein Kratzen, kein Hustenreiz."
+          ]
         }
       ],
-      "pitfalls": ["Platzhalter"],
-      "safety": ["Platzhalter"]
+      "pitfalls": [
+        "Zu laut tönen. Leise reicht völlig.",
+        "Das Aufwärmen weglassen, wenn die Zeit knapp ist. Lieber insgesamt kürzer üben.",
+        "Beim Gleiten nach oben drücken, bis es quietscht.",
+        "Beim Strohhalm Luft durch die Nase oder an den Lippen vorbei entweichen lassen."
+      ],
+      "safety": [
+        "Hör sofort auf, wenn es kratzt, brennt oder weh tut.",
+        "Bist du heiser, erkältet oder hast eine Kehlkopfentzündung, hilft Stimmruhe mehr als Training.",
+        "Trink vor dem Üben ein paar Schlucke Wasser.",
+        "Beim Wasserglas den Halm nur wenige Zentimeter eintauchen und nie Wasser ansaugen.",
+        "Wird dir schwindlig, mach eine Pause und atme normal weiter."
+      ]
+    },
+    {
+      "id": "twang",
+      "title": "Twang",
+      "subtitle": "Heller, tragender Klang ohne Druck",
+      "focus": true,
+      "intro": "Twang ist ein heller, strahlender, leicht quäkiger Klang, der weit trägt, ohne dass du drücken musst. Er entsteht direkt über deinen Stimmlippen: Ein kleiner Muskelring am Kehlkopfeingang, der aryepiglottische Sphinkter, zieht sich etwas zusammen. Dadurch wird der kurze Raum zwischen Stimmlippen und Kehlkopfeingang, der Epilarynx, enger. Twang ist nicht dasselbe wie Näseln: Ob Klang durch die Nase geht, steuert dein Gaumensegel, Twang dagegen entsteht im Kehlkopf. Deshalb gibt es oralen Twang (durch den Mund) und nasalen Twang (mit Nase). Für deine Sprechstimme suchst du meist den oralen.",
+      "why": "Twang verlagert Klangenergie in höhere Frequenzbereiche. Deine Stimme klingt dadurch heller und strahlender. Das ergänzt die Arbeit an der Resonanz, also daran, wie Rachen und Mund deinen Klang formen. Sie ist neben der Tonhöhe einer der wichtigsten Faktoren dafür, wie eine Stimme wahrgenommen wird. Wie klein deine Stimme wirkt, steuerst du dagegen vor allem über Kehlkopfhöhe, Zunge und Lippen, mehr dazu bei Resonanz und Größe. Twang klingt von selbst etwas lauter. Das ist gewollt: Deine Stimme trägt, etwa im Café oder in einer Gruppe, ohne dass du mehr Kraft gibst. Am besten wirkt Twang in kleiner Dosis und mit wenig Stimmgewicht, also mit einer leichten statt schweren, brummigen Stimme. Zu viel Twang klingt schnell scharf, spitz oder angestrengt. Eine kleine Studie mit fünf trans Frauen hat Twang mit einer zweiten Technik kombiniert. Danach klangen die Stimmen höher und heller und wurden meist als weiblich gehört. Das ist ermutigend, wegen der kleinen Gruppe aber nur ein erster Hinweis.",
+      "howToFind": [
+        "Starte mit einem stillen, inneren Lachen. Es hält den Hals weit, und der Twang kommt als feines Verengen oben dazu.",
+        "Hexenlachen: ein fieses, helles „hähähä“ wie eine Märchenhexe, leise statt laut.",
+        "Ente: ein kurzes, freches „quäk, quäk“.",
+        "Quengelndes Kind: „nja-nja-nja-njaa“ oder „nee-nee-nee-nee“, wie beim Necken.",
+        "Babyweinen: ein kurzes „wäää“, dabei bleibt dein Gesicht locker.",
+        "Katze: ein helles, langgezogenes „miaaau“; der Twang sitzt auf dem „iaa“.",
+        "Kichern: ein freches, quietschiges „hihihi“, klar und nicht gehaucht.",
+        "Die ng-Stellung: Sag „sing“ und halte das „ng“ am Ende. Mach daraus ein helles, quäkiges „nggg“ und öffne dann über ein g zu „ng-gää“.",
+        "Mach jeden Laut einmal ohne und einmal mit Twang. So lernst du, ihn an- und auszuschalten.",
+        "So fühlt es sich richtig an: klein, fein und hoch angesetzt, wie ein schmaler Kanal. Kein Drücken im Hals, kein Kratzen, kein Schmerz.",
+        "Die Anstrengung ist klein und sitzt oberhalb der Stimmlippen, nicht in Nacken, Kiefer oder Zunge.",
+        "Nicht jedes Geräusch klappt bei allen. Nimm das, was dir am leichtesten fällt, und bleib erst mal dabei."
+      ],
+      "examples": [
+        "Laute: nja-nja-nja, nee-nee-nee, wäää, miaaau, hähähä, hihihi, quäk",
+        "ng-Gleiter: nggg, ng-gii, ng-gee, ng-gää",
+        "Vokale: iii, eee, äää, aaa, ooo, uuu (mit hellen Vokalen geht es am leichtesten)",
+        "Silben: nji-nje-nja-njo-nju, mi-mä-ma-mo-mu, ki-kä-ka-ko-ku",
+        "Wörter: nie, Knie, Biene, Nähe, Tee, Fee, Kiel, wieder, Miete, Hallo, Kaffee, Sonne",
+        "Sätze ohne m, n und ng für den Nasen-Test: Wie viel ist es? Hast du Zeit? Der Tee ist heiß.",
+        "Alltagssätze: Hallo, ich bin's! Ich hätte gern einen Kaffee, bitte. Nein, nicht jetzt, vielleicht später.",
+        "Lesetext: Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre, als ein Wanderer, der in einen warmen Mantel gehüllt war, des Weges daherkam."
+      ],
+      "exercises": [
+        {
+          "id": "twang-finden",
+          "title": "Twang finden mit Geräuschen",
+          "goal": "Du findest den Twang-Klang und lernst, ihn bewusst an- und auszuschalten.",
+          "duration": "3–5 Minuten",
+          "steps": [
+            "Stell dich locker hin, Schultern unten, Kiefer locker. Trink vorher einen Schluck Wasser.",
+            "Mach ein stilles Lachen: Atme lautlos ein, als würdest du innerlich über etwas lachen. Dein Hals fühlt sich weit an. Behalte dieses weite Gefühl, während du gleich das Geräusch machst.",
+            "Wähle ein Geräusch: Hexenlachen, Ente, „nja-nja-nja“, Babyweinen, Katzen-„miau“ oder freches Kichern.",
+            "Mach es leise und kurz. Der Klang soll hell und quäkig werden, nicht laut.",
+            "Mach dasselbe Geräusch einmal neutral, ohne Quäken, und dann mit Twang. Wechsle ein paar Mal hin und her.",
+            "Spür nach: Die Anstrengung ist klein und fein, nicht drückend. Wenn es kratzt, mach es leiser oder pausiere.",
+            "Probier ein zweites Geräusch und vergleiche, welches sich leichter anfühlt.",
+            "Tipp: Nimm mit „Mit dieser Übung aufnehmen“ dein Lieblingsgeräusch auf, dreimal im Wechsel: ohne, mit, ohne, mit, ohne, mit Twang. So hörst du später den Unterschied."
+          ],
+          "examples": [
+            "hähähä (Hexe)",
+            "quäk, quäk (Ente)",
+            "nja-nja-nja-njaa",
+            "nee-nee-nee-nee",
+            "wäää (Baby, Gesicht locker)",
+            "miaaau (Katze)",
+            "hihihi (freches Kichern, nicht gehaucht)"
+          ],
+          "checks": [
+            "Mit Twang klingt es deutlich heller und trägt mehr, ohne dass du mehr Kraft oder Luft gibst.",
+            "Du kannst bewusst zwischen ohne und mit Twang wechseln.",
+            "Dein Hals fühlt sich danach frei an, du musst dich nicht räuspern.",
+            "Kiefer, Zunge und Nacken bleiben locker."
+          ]
+        },
+        {
+          "id": "twang-vokale-gleiter",
+          "title": "Twang auf Vokalen und Gleittönen",
+          "goal": "Du hältst den Twang auf langen Vokalen und nimmst ihn über verschiedene Tonhöhen mit.",
+          "duration": "3–5 Minuten",
+          "steps": [
+            "Starte mit deinem Geräusch aus der ersten Übung, zum Beispiel „nja“.",
+            "Verlängere den Vokal zu „njaaaa“. Halte den hellen Klang ein paar Sekunden, ohne mehr Kraft zu geben.",
+            "Geh über die ng-Stellung: Sag „sing“, halte ein helles „nggg“ und öffne über ein „g“ zu „ng-gii“ und „ng-gää“. So bleibt die Helligkeit, aber der Vokal klingt durch den Mund. Mehr dazu im Nasen-Test.",
+            "Wandere durch die Vokale: iii, eee, äää, aaa, ooo, uuu. Bei o und u ist Twang kniffliger, das ist normal.",
+            "Mach kleine, leise Gleittöne wie eine Mini-Sirene auf „iii“ oder „ng“: von bequem tief etwas nach oben und zurück. Bleib im angenehmen Bereich.",
+            "Mach nach jeder Runde eine kurze Pause, schluck und atme ruhig.",
+            "Tipp: Nimm ein gehaltenes „iii“ und eine Mini-Sirene auf. Vergleiche sie nächste Woche mit einer neuen Aufnahme."
+          ],
+          "examples": [
+            "njaaaa",
+            "ng-gii, ng-gee, ng-gää",
+            "iii – eee – äää – aaa – ooo – uuu",
+            "mi-mä-ma-mo-mu",
+            "Mini-Sirene auf ng oder iii, leise"
+          ],
+          "checks": [
+            "Der Klang bleibt hell, auch wenn der Ton länger wird.",
+            "Du wirst heller, ohne mehr Kraft oder Luft zu geben.",
+            "Beim Gleiten gibt es keinen Moment, der kratzt oder weh tut.",
+            "Die Luft fließt ruhig, du presst nicht dagegen."
+          ]
+        },
+        {
+          "id": "twang-oral-nasal",
+          "title": "Oral oder nasal? Der Nasen-Test",
+          "goal": "Du unterscheidest oralen von nasalem Twang und lernst, den hellen Klang durch den Mund zu führen.",
+          "duration": "2–4 Minuten",
+          "steps": [
+            "Summe ein leises „mmm“ und halte dir dabei kurz die Nase zu. Der Ton stoppt sofort, denn bei m, n und ng geht der Klang durch die Nase. Drück nicht weiter dagegen, lass gleich wieder los. So erkennst du einen Nasenlaut.",
+            "Jetzt ein „iii“ oder „äää“ mit Twang. Halte dir beim Tönen die Nase zu und lass wieder los.",
+            "Bleibt der Klang gleich, ist es oraler Twang. Genau den suchst du für deine Sprechstimme.",
+            "Wird er beim Zuhalten dumpf oder verstopft, ist Nasalität dabei. Das ist nasaler Twang.",
+            "Um ihn oral zu machen, sprich „ng-gää“: Beim g schließt das Gaumensegel den Nasenweg. Behalte die Helligkeit aus dem „ng“, aber lass das „ää“ durch den Mund klingen.",
+            "Teste dann die Sätze ohne m, n und ng mit offener und zugehaltener Nase.",
+            "Tipp: Nimm „Wie viel ist es?“ mit Twang auf, einmal mit offener und einmal mit zugehaltener Nase. Klingen beide fast gleich, bist du oral."
+          ],
+          "examples": [
+            "mmm, nnn (nasal, zum Vergleich)",
+            "ng-gää, ng-gii",
+            "iii und äää mit Nase auf und zu",
+            "Wie viel ist es?",
+            "Hast du Zeit?",
+            "Der Tee ist heiß."
+          ],
+          "checks": [
+            "Bei Sätzen ohne m, n oder ng ändert sich dein Klang kaum, wenn du die Nase zuhältst.",
+            "Der Twang bleibt hell, auch wenn du ihn oral machst.",
+            "Du klingst nicht näselnd, der Klang kommt aus dem Mund und nicht durch die Nase."
+          ]
+        },
+        {
+          "id": "twang-silben-woerter",
+          "title": "Twang in Silben und Wörtern",
+          "goal": "Du nimmst den Twang vom einzelnen Laut in echte Wörter mit.",
+          "duration": "3–5 Minuten",
+          "steps": [
+            "Fang mit Silbenreihen an: „nji-nje-nja-njo-nju“, dann „mi-mä-ma-mo-mu“, dann „ki-kä-ka-ko-ku“.",
+            "Sprich die Silben im Sprechrhythmus, nicht gesungen: leicht, kurz, hell.",
+            "Geh zu Wörtern mit hellen Vokalen: nie, Knie, Biene, Nähe, Tee, Fee, Kiel, wieder, Miete.",
+            "Dann Wörter mit dunkleren Vokalen: Hallo, Kaffee, Sonne, Kuchen, Montag. Achte darauf, dass der Twang bei a, o und u nicht ganz verschwindet.",
+            "Sprich jedes Wort erst ohne, dann mit Twang. Danach die ganze Liste nur mit Twang.",
+            "Tipp: Nimm eine feste Wortliste auf und benutze jede Woche dieselbe. So hörst du deinen Fortschritt."
+          ],
+          "examples": [
+            "nji-nje-nja-njo-nju",
+            "mi-mä-ma-mo-mu",
+            "ki-kä-ka-ko-ku",
+            "nie, Knie, Biene, Nähe, Tee, Fee, Kiel, wieder, Miete",
+            "Hallo, Kaffee, Sonne, Kuchen, Montag"
+          ],
+          "checks": [
+            "Jedes Wort klingt hell und trotzdem natürlich, nach dir selbst.",
+            "Bei o und u bleibt etwas Helligkeit.",
+            "Die Konsonanten bleiben deutlich, der Kiefer locker.",
+            "Du gibst nicht mehr Kraft, um hell zu klingen."
+          ]
+        },
+        {
+          "id": "twang-saetze-lesen",
+          "title": "Twang in Sätzen und beim Lesen",
+          "goal": "Du hältst einen leichten Twang über ganze Sätze und einen kurzen Lesetext.",
+          "duration": "5 Minuten",
+          "steps": [
+            "Nimm einen kurzen Satz und sprich ihn zuerst ohne Twang.",
+            "Finde den Twang kurz auf „nja“ und sprich den Satz direkt danach mit Twang.",
+            "Lies dann drei bis fünf Sätze oder einen kurzen Absatz. Achte auf die Satzenden, dort rutscht der Twang oft weg.",
+            "Wenn der Klang verloren geht, kurz „nja“ oder „hihi“ und dann weiter.",
+            "Behalte eine natürliche Satzmelodie: Du sprichst, du singst nicht.",
+            "Tipp: Wähle einen Wochensatz und nimm ihn jede Woche einmal auf, am besten zu einer ähnlichen Tageszeit. So kannst du die Aufnahmen direkt vergleichen."
+          ],
+          "examples": [
+            "Wie viel ist es?",
+            "Ich nehme einen Tee mit Zitrone, bitte.",
+            "Hallo, ich bin's! Hast du kurz Zeit?",
+            "Nein, nicht jetzt, vielleicht später.",
+            "Die Biene fliegt über die Wiese zu den Blumen.",
+            "Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre, als ein Wanderer, der in einen warmen Mantel gehüllt war, des Weges daherkam."
+          ],
+          "checks": [
+            "Der Twang hält bis zum Satzende, ohne dass du mehr Kraft gibst.",
+            "Die Sätze klingen natürlich, mit normaler Satzmelodie.",
+            "Nach dem Üben fühlt sich deine Stimme frisch an, nicht müde oder kratzig."
+          ]
+        },
+        {
+          "id": "twang-dimmer",
+          "title": "Der Twang-Dimmer (0 bis 10)",
+          "goal": "Du lernst, den Twang fein zu dosieren, statt ihn nur an- oder auszuschalten.",
+          "duration": "3–5 Minuten",
+          "steps": [
+            "Stell dir einen Dimmer vor: 0 ist kein Twang, 10 ist dein deutlichster Twang, wie beim Hexenlachen. Die Skala ist deine eigene.",
+            "Sprich einen Satz auf Stufe 0, dann kurz und leise auf Stufe 10.",
+            "Jetzt die Zwischenstufen: 2, 4, 6, 8 und wieder zurück nach unten.",
+            "Such die Stufe, die hell und klar klingt, aber noch natürlich. Für den Alltag reicht meist eine niedrige Stufe.",
+            "In einem lauten Raum hilft dir etwas mehr Twang statt mehr Lautstärke. Nutz das nur kurz und gönn deiner Stimme danach eine Pause.",
+            "Tipp: Nimm denselben Satz auf den Stufen 0, 2, 4 und 8 auf und hör sie hintereinander an. Schreib in die Notizen, welche Stufe dir am besten gefällt."
+          ],
+          "examples": [
+            "Hallo, ich bin's, hast du kurz Zeit?",
+            "Ich hätte gern einen Kaffee, bitte.",
+            "Stufen: 0 – 2 – 4 – 6 – 8 – 10 – 6 – 3 – 0"
+          ],
+          "checks": [
+            "Du kannst mindestens drei Stufen hörbar unterscheiden.",
+            "Mehr Twang heißt heller und tragfähiger, nicht gedrückter. Die Anstrengung bleibt klein.",
+            "Auf deiner Alltagsstufe klingst du für dich nach dir selbst.",
+            "Auch auf Stufe 10 tut nichts weh. Wenn doch, hör sofort auf, mach eine Pause und bleib danach auf niedrigen Stufen."
+          ]
+        },
+        {
+          "id": "twang-kombinieren",
+          "title": "Twang mit Tonhöhe und Größe kombinieren",
+          "goal": "Du verbindest einen leichten Twang mit deiner Zieltonhöhe und einer kleineren Resonanz im freien Sprechen.",
+          "duration": "5 Minuten",
+          "steps": [
+            "Finde zuerst eine Tonhöhe, in der du bequem und ohne Anstrengung sprechen kannst, zum Beispiel mit einem fragenden „mhm?“. Mehr dazu bei Tonhöhe.",
+            "Mach die Größe kleiner, also den Klangraum in Rachen und Mund: Flüstere ganz locker und hauchig ein „iii“, nur kurz und ohne Bühnenflüstern. Lass das Flüstern dann langsam heller werden. Der Raum im Hals wird kleiner, der Kehlkopf darf dabei leicht nach oben gehen, ohne dass du ihn mit Zunge oder Schlucken hochdrückst. Ein leichtes Lächeln mit lockerem Kiefer hilft zusätzlich.",
+            "Behalte diese kleine Größe und gib Stimme dazu: Aus dem geflüsterten wird ein klares, gesprochenes „iii“, nicht gehaucht.",
+            "Gib eine Prise Twang dazu, eine niedrige Stufe auf deinem Dimmer.",
+            "Sprich einen Satz mit allen drei Reglern: Tonhöhe, kleine Größe, leichter Twang. Die Stimme bleibt leicht, mit wenig Stimmgewicht, nicht schwer oder brummig.",
+            "Sprich dann frei, etwa eine halbe Minute: Was hast du heute gemacht?",
+            "Wenn es anstrengend wird, dreh zuerst den Twang herunter.",
+            "Tipp: Mach eine Vorher-nachher-Aufnahme mit demselben Satz, einmal nur mit Tonhöhe und einmal mit Tonhöhe, kleiner Größe und leichtem Twang. Vergleiche beide direkt."
+          ],
+          "examples": [
+            "mhm? (zum Finden der Tonhöhe)",
+            "locker geflüstertes iii, das heller wird, dann klar gesprochen",
+            "Hallo, schön dich zu sehen!",
+            "Ich hätte gern einen Kaffee, bitte.",
+            "Frei sprechen: Was hast du heute gemacht? Was isst du gern?"
+          ],
+          "checks": [
+            "Deine Stimme klingt hell und klein, aber nicht scharf oder quäkig.",
+            "Tonhöhe, Größe und Twang halten im freien Sprechen zumindest für ein paar Sätze.",
+            "Du spürst keinen Druck im Hals, auch nicht nach dem Üben.",
+            "Beim Anhören klingt die Kombination stimmig, ohne dass ein einzelner Regler übertrieben wirkt."
+          ]
+        }
+      ],
+      "pitfalls": [
+        "Pressen statt Twang: Wenn du die Stimmlippen fest zusammenpresst, klingt es hart und gepresst, und du brauchst viel Kraft. Twang ist ein feines Verengen über den Stimmlippen, die Stimme selbst bleibt leicht.",
+        "Enge statt Twang: Fühlt es sich kratzig oder gequetscht an oder musst du dich räuspern, ziehen sich meist die Taschenfalten mit zusammen. Das sind die „falschen Stimmlippen“ direkt über den echten. Ein stilles, inneres Lachen weitet sie wieder. Starte dann leiser neu.",
+        "Nasal statt oral: Klingt es näselnd, als käme der Klang aus der Nase statt aus dem Mund? Dann geht zu viel Klang durch die Nase. Mach den Nasen-Test.",
+        "Zu viel Twang: Ein wenig reicht. Auf hoher Stufe klingt es schnell scharf und spitz.",
+        "Laut aus dem Hals: Twang soll dich tragen, damit du nicht drücken musst. Gibst du dabei mehr Kraft oder Luft, nimm sie zurück. Etwas lauter klingen darf es von selbst.",
+        "Kiefer- und Zungenspannung: Kein festes Grinsen, keine nach hinten gedrückte Zunge. Kiefer locker, Zungenspitze liegt hinter den unteren Zähnen.",
+        "Twang auf schwerer Stimme: Klingt deine Stimme voll und brummig, also mit viel Stimmgewicht, wird Twang eher laut und hart. Kombiniere ihn mit einer leichten Stimme, siehe Stimmgewicht.",
+        "Zu lange am Stück: Twang ist Muskelarbeit. Lieber kurz und oft als lange."
+      ],
+      "safety": [
+        "Twang darf nie wehtun. Bei Schmerz, Kratzen, Brennen oder Heiserkeit hörst du sofort auf und machst eine Pause.",
+        "Wärm dich vorher kurz auf, zum Beispiel mit Lippenflattern oder leisem Summen.",
+        "Übe lieber täglich ein paar Minuten als selten und lange, und mach zwischendurch Pausen.",
+        "Mach nicht alle Übungen auf einmal. Nimm dir pro Einheit ein oder zwei Übungen vor und hör auf, solange sich deine Stimme noch frisch anfühlt. Geh erst zur nächsten Übung, wenn die vorige leicht und mühelos klappt.",
+        "Trink über den Tag verteilt genug Wasser und gönn deiner Stimme Ruhephasen.",
+        "Bleib leise bis mittellaut. Twang macht dich hörbar, ohne dass du rufen musst.",
+        "Bei Erkältung, Halsschmerzen oder heiserer Stimme lieber pausieren.",
+        "In der Fachliteratur gibt es Bedenken, dass Twang mit zu viel Enge die Stimme belasten kann. Darum: wenig Kraft, viel Gefühl.",
+        "Hält eine Heiserkeit länger als zwei Wochen an, lass dich ärztlich untersuchen, am besten in der HNO-Heilkunde oder Phoniatrie, und such dir logopädische Begleitung.",
+        "Geh ohne abzuwarten zur Ärztin oder zum Arzt, wenn du beim Sprechen oder Schlucken Schmerzen oder Beschwerden hast, Blut hustest, einen Knoten am Hals bemerkst oder deine Stimme mehrere Tage ganz weg ist. Bei Atemnot hol dir sofort Hilfe.",
+        "Diese App ersetzt keine Logopädie. Eine logopädische Fachperson mit Erfahrung im Stimmtraining für trans Personen kann Twang sicher mit dir aufbauen und Fehler früh erkennen."
+      ]
+    },
+    {
+      "id": "tonhoehe",
+      "title": "Tonhöhe",
+      "subtitle": "Eine bequeme, etwas höhere Sprechstimmlage finden",
+      "focus": false,
+      "intro": "Die Tonhöhe ist, wie hoch oder tief deine Stimme klingt. Messen lässt sie sich als Grundfrequenz in Hertz (Hz), also wie oft deine Stimmlippen pro Sekunde schwingen. Sie ist ein wichtiges Signal dafür, wie eine Stimme gehört wird. Allein reicht sie aber meist nicht: Eine höhere Stimme mit großer, dunkler Resonanz wird oft trotzdem nicht als weiblich gehört oder klingt unstimmig. Deshalb übst du Tonhöhe immer zusammen mit Resonanz und Stimmgewicht.",
+      "why": "In der Forschung gilt die Tonhöhe als stärkstes Einzelsignal, die Resonanz folgt dicht dahinter, und erst beides zusammen klingt stimmig. Zur Orientierung: In Studien wurden Stimmen meist ab etwa 155 bis 180 Hz eher als weiblich gehört, in Stimmgeräte-Apps ungefähr D#3 bis F#3. Weibliche Sprechstimmen sind sehr vielfältig und sind in den letzten Jahrzehnten im Schnitt tiefer geworden. Diese Werte sind Orientierung, kein Ziel, das du erreichen musst.",
+      "howToFind": [
+        "Miss mit einer Stimmgerät- oder Tonhöhen-App, wo du beim entspannten Sprechen gerade liegst.",
+        "Nutze Tonhöhen-App und Aufnahme nacheinander, nicht gleichzeitig. Meist kann nur eine App das Mikrofon benutzen.",
+        "Summe ein zustimmendes „mhm“, etwas höher als sonst. Dieser Ton ist oft ein guter Startpunkt.",
+        "Am Klavier oder in einer Klavier-App kannst du den Zielton anschlagen und mitsummen.",
+        "Zur Umrechnung: 165 Hz ist etwa der Ton E3, 196 Hz ist G3, 220 Hz ist A3. Die meisten Apps zählen so, dass das mittlere C am Klavier C4 heißt. Zeigt deine App andere Oktavzahlen, verlass dich auf die Hz-Werte.",
+        "Dein Zielbereich fühlt sich mühelos an und lässt nach oben noch Platz für Melodie.",
+        "Wird es eng, quietschig oder spürst du deinen Hals, bist du zu hoch."
+      ],
+      "examples": [
+        "Zielton summen: „mmm“",
+        "mhm, ja",
+        "Zählen: eins, zwei, drei, vier, fünf",
+        "Montag, Dienstag, Mittwoch, Donnerstag",
+        "Mein Name ist … und ich wohne in …",
+        "Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre."
+      ],
+      "exercises": [
+        {
+          "id": "tonhoehe-ausgangslage",
+          "title": "Ausgangslage aufnehmen",
+          "goal": "Wissen, wo du gerade stehst, damit du Fortschritte fair vergleichen kannst.",
+          "duration": "3 Minuten",
+          "steps": [
+            "Starte die Aufnahme hier in der App und lies in deiner gewohnten, entspannten Stimme: „Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre.“",
+            "Zähle danach locker von eins bis zehn und beende die Aufnahme.",
+            "Öffne jetzt eine Tonhöhen-App und sprich Satz und Zählen noch einmal genauso.",
+            "Notiere ungefähr, um welche Töne oder Hz-Werte deine Stimme kreist. Einzelne Ausreißer zählen nicht.",
+            "Wiederhole beides einmal pro Woche mit genau demselben Satz."
+          ],
+          "examples": [
+            "Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre.",
+            "eins, zwei, drei … zehn",
+            "Heute ist Montag und ich übe meine Stimme."
+          ],
+          "checks": [
+            "Du sprichst ganz normal, ohne schon zu üben.",
+            "Du nimmst unter ähnlichen Bedingungen auf, etwa gleich laut und zur gleichen Tageszeit.",
+            "Du notierst einen Bereich, keinen einzelnen exakten Wert."
+          ]
+        },
+        {
+          "id": "tonhoehe-zielton",
+          "title": "Deinen Zielton finden",
+          "goal": "Einen bequemen Zielbereich finden, der etwas über deiner Ausgangslage liegt.",
+          "duration": "3–5 Minuten",
+          "steps": [
+            "Summe nach dem Aufwärmen ein leichtes, zustimmendes „mhm“, etwas höher als gewohnt.",
+            "Schau in der Tonhöhen-App, welcher Ton das ist. Probiere ein paar Töne darüber und darunter.",
+            "Wähle einen Ton, der sich mühelos anfühlt und bei dem du noch gut Melodie nach oben und unten machen kannst.",
+            "Summe diesen Ton und sprich dann darauf: „mhm, ja“, „mhm, genau“.",
+            "Zähle auf dem Zielton von eins bis fünf, erst gleichmäßig, dann mit natürlicher Sprechmelodie.",
+            "Du musst dein Ziel nicht weiter anheben. Wenn du es möchtest, dann nur in kleinen Schritten über Wochen und nur, solange es mühelos bleibt."
+          ],
+          "examples": [
+            "„mhm“ auf dem Zielton",
+            "mhm, ja – mhm, genau – mhm, gerne",
+            "eins, zwei, drei, vier, fünf"
+          ],
+          "checks": [
+            "Du könntest auf diesem Ton entspannt ein längeres Gespräch führen.",
+            "Der Ton klingt weder gequetscht noch hauchig.",
+            "Nach oben ist noch Luft."
+          ]
+        },
+        {
+          "id": "tonhoehe-gleiter-sprache",
+          "title": "Vom Gleiter in die Sprache",
+          "goal": "Den Zielbereich ins Sprechen mitnehmen und dort bleiben.",
+          "duration": "5 Minuten",
+          "steps": [
+            "Gleite auf „mmm“ von unten in deinen Zielton und bleib kurz dort.",
+            "Sprich vom Zielton aus ein Wort: „mmm-Mona“, „mmm-Montag“.",
+            "Steigere dich Stufe für Stufe: Silbe, Wort, kurze Phrase, ganzer Satz.",
+            "Lies zwei, drei Sätze. Die Melodie darf auf und ab gehen und um deinen Zielbereich kreisen, nicht an einem Ton kleben.",
+            "Prüfe mit der Tonhöhen-App, ob du am Satzende unter deinen Bereich absackst. Nimm erst danach hier auf.",
+            "Nimm den Nordwind-Satz auf und vergleiche ihn mit deiner Ausgangsaufnahme."
+          ],
+          "examples": [
+            "mmm-Mona, mmm-Montag, mmm-Milch",
+            "Morgen gehe ich mit Mona einkaufen.",
+            "Möchtest du noch einen Tee?",
+            "Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre."
+          ],
+          "checks": [
+            "Deine Tonhöhe bewegt sich, bleibt im Mittel aber in deinem Zielbereich.",
+            "Die Satzenden fallen nicht in ein tiefes Knarren.",
+            "Nach fünf Minuten fühlt sich die Stimme nicht müde oder kratzig an."
+          ]
+        }
+      ],
+      "pitfalls": [
+        "Nur auf die Hz-Zahl schauen und Resonanz und Leichtigkeit vergessen.",
+        "Zu hoch zielen. Das klingt schnell gepresst und ermüdet.",
+        "Monoton auf einem Ton bleiben statt mit Melodie zu sprechen.",
+        "Am Satzende tief absacken.",
+        "Das Ziel zu schnell nach oben schrauben."
+      ],
+      "safety": [
+        "Höher sprechen darf sich nie anstrengend anfühlen. Erzwinge keine Tonhöhe.",
+        "Dauerhaft zu hoch und gepresst zu sprechen kann die Stimmlippen überlasten.",
+        "Bei Kratzen, Druckgefühl oder Heiserkeit sofort aufhören. Übe erst wieder, wenn sich deine Stimme frei anfühlt, und dann kürzer und entspannter.",
+        "Eine logopädische Praxis kann mit dir einen gesunden Zielbereich festlegen. Diese App ersetzt das nicht."
+      ]
+    },
+    {
+      "id": "resonanz",
+      "title": "Resonanz",
+      "subtitle": "Den Klangraum kleiner und heller machen",
+      "focus": false,
+      "intro": "Resonanz beschreibt, wie dein Ansatzrohr den Ton formt, also Rachen, Mund und Nase. Ein großer Raum klingt dunkler und größer, ein kleinerer Raum heller und kleiner. Du kannst diesen Raum aktiv verändern: mit der Höhe des Kehlkopfs, der Lage der Zunge und der Form der Lippen. Im Training spricht man deshalb oft auch von „Größe“.",
+      "why": "Die Klangfarbe, akustisch die Formanten, ist nach der Tonhöhe das zweitwichtigste Signal für das gehörte Geschlecht. Ohne passende Resonanz wird selbst eine hohe Stimme oft nicht als weiblich gehört. In einer kleinen Studie wurden die Stimmen von trans Frauen nach einem Training mit leicht breiteren Lippen und weiter vorn liegender Zunge von Zuhörenden überwiegend als weiblicher eingeschätzt. Resonanz ist außerdem schonend, weil sie keine zusätzliche Höhe von den Stimmlippen verlangt.",
+      "howToFind": [
+        "Leg einen Finger leicht auf den Kehlkopf. Beim Schlucken spürst du, wie er nach oben geht. Ein wenig in diese Richtung, ganz ohne Druck, ist das Ziel.",
+        "Hechle wie ein kleiner Hund oder sag „ih“: Der Raum wird kleiner und heller.",
+        "Die Zunge liegt eher hoch und vorn, wie beim „i“. Die Lippen dürfen leicht lächeln.",
+        "Flüstere: Ohne Ton hörst du nur die Resonanz. Ein heller, kleiner Flüsterklang zeigt einen kleinen Raum.",
+        "In der Aufnahme klingt kleine Resonanz näher, heller und weniger hohl."
+      ],
+      "examples": [
+        "Hecheln: großer Hund „hhoh“, kleiner Hund „hhih“",
+        "ih – eh – äh – ah – oh – uh mit gleich hellem Klang",
+        "Biene, Liebe, Wiese, Miete, sieben",
+        "Lisa liebt die Wiese im Sommer.",
+        "Gute Musik tut mir gut.",
+        "Hallo, wie geht es dir?"
+      ],
+      "exercises": [
+        {
+          "id": "resonanz-grosser-kleiner-hund",
+          "title": "Großer Hund, kleiner Hund",
+          "goal": "Den Unterschied zwischen großem und kleinem Klangraum spüren und hören.",
+          "duration": "3 Minuten",
+          "steps": [
+            "Hechle tonlos wie ein großer, schwerer Hund: tief und dunkel, „hhoh-hhoh“. Der Kehlkopf geht nach unten.",
+            "Hechle jetzt wie ein ganz kleiner Hund: hell und leicht, „hhih-hhih“. Der Kehlkopf geht nach oben.",
+            "Wechsle ein paarmal langsam hin und her, immer nur wenige Atemzüge lang. Ein Finger am Kehlkopf hilft dir, die Bewegung zu spüren.",
+            "Bleib beim kleinen Hund und gib einen leisen Ton dazu: „hi“, „ja“, „nie“.",
+            "Sprich aus dieser Einstellung kurze Wörter und dann einen ganzen Satz.",
+            "Nimm denselben Satz einmal als großer und einmal als kleiner Hund auf und vergleiche."
+          ],
+          "examples": [
+            "hhoh – hhih",
+            "hi, ja, nie, wie",
+            "Hallo, wie geht es dir?",
+            "Ich bin gleich wieder da."
+          ],
+          "checks": [
+            "Du spürst den Kehlkopf steigen, ohne dass der Hals eng wird.",
+            "Der Satz klingt kleiner und heller, aber nicht gepresst.",
+            "Die Tonhöhe steigt nicht automatisch stark mit. Größe und Höhe sind getrennte Regler."
+          ]
+        },
+        {
+          "id": "resonanz-ih-aufhellen",
+          "title": "Mit „ih“ aufhellen",
+          "goal": "Die helle, vordere Zungenlage auf alle Vokale übertragen.",
+          "duration": "3–5 Minuten",
+          "steps": [
+            "Sprich ein langes „iiih“. Spür, wie die Zunge hoch und vorn liegt und ihre Ränder die oberen Backenzähne berühren.",
+            "Lächle ganz leicht und hör auf den hellen Klang.",
+            "Gleite vom „ih“ durch die Vokale: „ih – eh – äh – ah – oh – uh“. Nimm die Helligkeit vom „ih“ mit.",
+            "Sprich Wörter mit vielen i-Lauten, dann Wörter mit dunklen Vokalen.",
+            "Lies die Sätze und denk dabei an das „ih“ im Hintergrund.",
+            "Nimm den Satz mit dunklen Vokalen vor und nach der Übung auf und vergleiche."
+          ],
+          "examples": [
+            "ih – eh – äh – ah – oh – uh",
+            "Biene, Liebe, Wiese, Miete, sieben",
+            "Mond, Mut, Ruhe, Gold",
+            "Lisa liebt die Wiese im Sommer.",
+            "Gute Musik tut mir gut."
+          ],
+          "checks": [
+            "„oh“ und „uh“ klingen heller, sind aber noch gut verständlich.",
+            "Der Kiefer bleibt locker, du presst die Zunge nicht nach oben.",
+            "In der Aufnahme klingt die zweite Version heller und näher."
+          ]
+        },
+        {
+          "id": "resonanz-fluester-sirene",
+          "title": "Flüster-Sirene",
+          "goal": "Resonanz ohne Tonhöhe hören und die kleine Einstellung finden.",
+          "duration": "2 Minuten",
+          "steps": [
+            "Flüstere entspannt ein langes „huuu“ und gleite langsam zu „hiii“. Eher hauchen als pressen.",
+            "Hör auf die Klangfarbe des Flüsterns. Das Rauschen klingt höher und heller, wenn der Raum kleiner wird.",
+            "Mach daraus eine Sirene: Lass den Flüsterklang nur mit Zunge, Lippen und Kehlkopf hoch und runter wandern.",
+            "Bleib oben beim hellen „hiii“-Klang und flüstere einen Satz in dieser Einstellung.",
+            "Sprich denselben Satz jetzt leise mit Stimme und halte die kleine, helle Einstellung.",
+            "Nur wenige Durchgänge, dann mit normaler Stimme weiter. Nimm die Version mit Stimme auf."
+          ],
+          "examples": [
+            "huuu – hiii – huuu",
+            "geflüstert: Hallo, wie geht es dir?",
+            "mit Stimme: Hallo, wie geht es dir?"
+          ],
+          "checks": [
+            "Der Flüsterklang wird hörbar heller.",
+            "Du flüsterst leise und locker, nicht scharf oder gepresst.",
+            "Beim Wechsel zur Stimme bleibt der Klang klein."
+          ]
+        }
+      ],
+      "pitfalls": [
+        "Den Kehlkopf mit Kraft hochdrücken oder den Hals eng machen.",
+        "Zu breit lächeln oder die Zunge hochpressen. Das klingt künstlich und ermüdet.",
+        "Resonanz mit Tonhöhe verwechseln. Beides lässt sich getrennt steuern.",
+        "Nasal werden. Ein näselnder Klang ist nicht dasselbe wie helle Resonanz.",
+        "Nur Einzelwörter üben und nie ganze Sätze."
+      ],
+      "safety": [
+        "Kein Druck am Hals. Der Finger am Kehlkopf liegt nur leicht auf.",
+        "Flüstere nur kurz und locker. Gepresstes Flüstern strengt die Stimme an.",
+        "Hechle nur ein paar Atemzüge am Stück. Wird dir schwindlig, atme normal weiter und mach eine Pause.",
+        "Hör auf bei Engegefühl, Schmerz oder Schluckbeschwerden.",
+        "Mach Pausen, auch wenn es gerade gut läuft."
+      ]
+    },
+    {
+      "id": "stimmgewicht",
+      "title": "Stimmgewicht",
+      "subtitle": "Leichter klingen, ohne hauchig zu werden",
+      "focus": false,
+      "intro": "Stimmgewicht beschreibt, wie schwer oder leicht eine Stimme klingt. Bei einer schweren Stimme schwingen die Stimmlippen dick und mit viel Kontakt, das klingt voll, dröhnend und brummig. Bei einer leichteren Stimme schwingen sie dünner, der Klang wird weicher und klarer. Im Estill Voice Training heißen diese Einstellungen „thick folds“ und „thin folds“.",
+      "why": "Eine leichte Stimme passt zu einer etwas höheren Tonhöhe und einer kleinen Resonanz, erst das Zusammenspiel klingt natürlich. Leicht heißt aber nicht hauchig. Eine hauchige Stimme verbraucht viel Luft, ermüdet schnell und klingt auf Dauer kraftlos. Ob Behauchtheit überhaupt weiblicher wirkt, ist in der Forschung uneinheitlich.",
+      "howToFind": [
+        "Schwer klingt wie ein gewichtiger Bürokrat, der langsam und dröhnend einen Bescheid vorliest.",
+        "Leicht klingt, als würdest du jemandem freundlich und ruhig etwas erklären.",
+        "Leg eine Hand auf die Brust und sprich auf gleicher Tonhöhe und Lautstärke. Bei schwerer Stimme vibriert es dort meist stärker, bei leichter weniger. Das ist nur ein grober Hinweis, entscheidend ist der klare, nicht hauchige Klang.",
+        "Ein kurzes, zustimmendes „mhm“ ist bei vielen Menschen von Natur aus leicht.",
+        "Leicht klingt klar wie ein dünner, aber deutlicher Faden. Hauchig klingt rauschig, als würde neben dem Ton Luft entweichen.",
+        "Etwas leiser sprechen nimmt oft Gewicht weg. Der Ton bleibt dabei klar."
+      ],
+      "examples": [
+        "mhm (ja), mhm? (wirklich?), hm! (aha)",
+        "Abend, Ende, immer, Oma, Uhr, Insel",
+        "Guten Tag, ich hätte gern einen Termin.",
+        "Am Abend essen alle ein Eis.",
+        "Kannst du mir kurz helfen?"
+      ],
+      "exercises": [
+        {
+          "id": "stimmgewicht-schwer-leicht",
+          "title": "Schwer und leicht im Kontrast",
+          "goal": "Stimmgewicht spüren und eine leichte, aber klare Mitte finden.",
+          "duration": "3–4 Minuten",
+          "steps": [
+            "Sprich „Guten Tag, ich hätte gern einen Termin.“ absichtlich schwer, wie ein gewichtiger Bürokrat: langsam, voll, dröhnend. Nicht laut werden.",
+            "Sprich denselben Satz jetzt ganz leicht, fast schwebend, auf ähnlicher Tonhöhe.",
+            "Stell dir eine Skala von 1 bis 5 vor: 1 ist schwer, 5 ist so leicht, dass es hauchig wird. Sprich den Satz auf jeder Stufe.",
+            "Such die Stufe, die leicht, aber noch klar und tragfähig klingt. Das ist dein Arbeitsbereich.",
+            "Nimm die schwere Version und deine leichte Version nacheinander auf und vergleiche."
+          ],
+          "examples": [
+            "Guten Tag, ich hätte gern einen Termin.",
+            "Können Sie mir sagen, wo der Bahnhof ist?",
+            "Ich nehme den Kaffee mit Milch."
+          ],
+          "checks": [
+            "Bei gleicher Tonhöhe und Lautstärke spürt die Hand bei der leichten Version weniger Vibration.",
+            "Der leichte Ton ist klar, ohne Rauschen.",
+            "Du hast am Satzende noch genug Luft."
+          ]
+        },
+        {
+          "id": "stimmgewicht-mhm",
+          "title": "Mhm-Zustimmung",
+          "goal": "Den natürlich leichten Klang von Zustimmungslauten in Wörter mitnehmen.",
+          "duration": "2–3 Minuten",
+          "steps": [
+            "Mach ein entspanntes, zustimmendes „mhm“, als würdest du jemandem am Telefon zuhören.",
+            "Variiere: „mhm“ (ja), „mhm?“ (wirklich?), „hm!“ (aha). Bleib dabei leicht.",
+            "Häng direkt ein Wort an: „mhm, ja“, „mhm, genau“, „mhm, gerne“.",
+            "Mach daraus kurze Sätze: „mhm, das klingt gut“, „mhm, das mache ich“.",
+            "Achte darauf, dass das Wort genauso leicht klingt wie das „mhm“. Nimm eine Runde auf."
+          ],
+          "examples": [
+            "mhm – mhm? – hm!",
+            "mhm, ja – mhm, genau – mhm, gerne",
+            "mhm, das klingt gut.",
+            "mhm, das mache ich."
+          ],
+          "checks": [
+            "Das „mhm“ vibriert vorn an den Lippen, nicht schwer in der Brust.",
+            "Zwischen „mhm“ und Wort gibt es keinen Sprung ins Schwere.",
+            "Es fühlt sich natürlich an, nicht gespielt."
+          ]
+        },
+        {
+          "id": "stimmgewicht-einsatz",
+          "title": "Weicher Stimmeinsatz",
+          "goal": "Vokale ohne harten Knacks und ohne Hauch beginnen.",
+          "duration": "3 Minuten",
+          "steps": [
+            "Sag „Abend“ einmal kurz mit hartem Einsatz, leise und ohne Pressen: Du hörst einen deutlichen Knacks vor dem A.",
+            "Sag „Abend“ mit gehauchtem Einsatz: Erst kommt Luft, wie „h-Abend“.",
+            "Such die Mitte: Luft und Ton beginnen gleichzeitig, weich und klar.",
+            "Übe diesen weichen Einsatz mit Wörtern, die mit einem Vokal beginnen.",
+            "Sprich dann Sätze mit vielen Vokalanfängen, leicht und ohne Knacks.",
+            "Nimm einen Satz auf und hör genau auf die Wortanfänge."
+          ],
+          "examples": [
+            "Abend, Ende, immer, Oma, Uhr, Insel",
+            "Am Abend essen alle ein Eis.",
+            "Ich ordne alle Ordner im Arbeitszimmer."
+          ],
+          "checks": [
+            "Kein harter, gepresster Knacks vor dem Vokal.",
+            "Kein hörbares Luftrauschen vor dem Ton.",
+            "Der Klang ist vom ersten Moment an leicht und klar."
+          ]
+        }
+      ],
+      "pitfalls": [
+        "Leicht mit hauchig verwechseln.",
+        "In eine dünne Kopfstimme ausweichen, die nicht mehr nach Sprechen klingt.",
+        "So leise werden, dass dich niemand mehr versteht.",
+        "Jeden kleinen Knacklaut verbieten wollen. Im Deutschen beginnen viele Wörter mit einem leichten, festen Einsatz. Das ist normal. Nur hartes, gepresstes Knallen belastet."
+      ],
+      "safety": [
+        "Hauchiges Sprechen über längere Zeit trocknet die Schleimhäute aus und ermüdet. Trink regelmäßig.",
+        "Wenn du ständig nach Luft schnappst, ist die Stimme zu hauchig.",
+        "Auch die schwere Kontrastversion nur kurz, ohne Pressen und nicht laut.",
+        "Bei Heiserkeit oder Kratzen mach eine Pause."
+      ]
+    },
+    {
+      "id": "intonation",
+      "title": "Intonation & Artikulation",
+      "subtitle": "Sprechmelodie, Satzenden und klare Aussprache",
+      "focus": false,
+      "intro": "Intonation ist die Melodie deiner Sprache: wie die Tonhöhe in Wörtern und Sätzen steigt und fällt. Dazu gehören Betonung, Tempo und die Art, wie du Sätze beendest. Artikulation beschreibt, wie klar und genau du Laute formst. Beides macht deine Stimme lebendig und persönlich.",
+      "why": "Eine höhere Stimme ohne Melodie klingt schnell künstlich und ist anstrengend. In Studien hing mehr Bewegung in der Tonhöhe oft mit einem weiblicheren Eindruck zusammen, auch wenn dieser Effekt kleiner ist als der von Tonhöhe und Resonanz. Eine lebendige Melodie hilft dir außerdem, im Zielbereich zu bleiben, ohne an einem Ton festzukleben. Klare, vorn gebildete Konsonanten unterstützen den hellen Klang.",
+      "howToFind": [
+        "Zeichne die Satzmelodie beim Sprechen mit der Hand in die Luft.",
+        "Sprich so, als würdest du von etwas erzählen, auf das du dich freust.",
+        "Hör auf die Satzenden: Fällt die Stimme dort ganz tief ab oder knarrt sie?",
+        "Spür die Zungenspitze bei t, d, n und l. Sie arbeitet vorn am Zahndamm hinter den oberen Schneidezähnen. Beim s darf sie oben oder hinter den unteren Zähnen liegen, Hauptsache, das s klingt hell und klar.",
+        "Wähle ein ruhiges Tempo. Deutlich ist wichtiger als schnell."
+      ],
+      "examples": [
+        "Das ist ja schön!",
+        "Kommst du heute Abend mit?",
+        "Ich habe das wirklich nicht gewusst.",
+        "Fischers Fritz fischt frische Fische.",
+        "Zwischen zwei Zwetschgenzweigen sitzen zwei zwitschernde Schwalben.",
+        "Blaukraut bleibt Blaukraut und Brautkleid bleibt Brautkleid."
+      ],
+      "exercises": [
+        {
+          "id": "intonation-ein-satz-viele-gefuehle",
+          "title": "Ein Satz, viele Gefühle",
+          "goal": "Mehr Melodie und Ausdruck in dein Sprechen bringen.",
+          "duration": "3–4 Minuten",
+          "steps": [
+            "Nimm den Satz „Das ist ja schön.“",
+            "Sprich ihn begeistert, dann überrascht, dann ironisch, dann zärtlich.",
+            "Zeichne die Melodie mit der Hand mit. Lass die Bewegung ruhig größer werden als gewohnt.",
+            "Mach dasselbe mit „Du kommst morgen?“ als Frage und „Du kommst morgen.“ als Feststellung.",
+            "Bleib in allen Versionen leicht und in deinem Zielbereich, auch an den hohen Stellen.",
+            "Nimm eine monotone und eine lebendige Version auf und hör dir den Unterschied an."
+          ],
+          "examples": [
+            "Das ist ja schön.",
+            "Du kommst morgen? – Du kommst morgen.",
+            "Ach, wirklich?",
+            "Was für ein Tag!"
+          ],
+          "checks": [
+            "Die Versionen klingen hörbar verschieden.",
+            "Die hohen Stellen gehen leicht, ohne Druck.",
+            "Die Stimme bleibt dabei hell und leicht."
+          ]
+        },
+        {
+          "id": "intonation-satzenden",
+          "title": "Satzenden gestalten",
+          "goal": "Am Satzende nicht in die Tiefe oder ins Knarren absacken.",
+          "duration": "3 Minuten",
+          "steps": [
+            "Lies einen Aussagesatz und hör auf das letzte Wort. Fällt es tief ab oder knarrt es?",
+            "Lass das Satzende sanft fallen, aber nur bis zum unteren Rand deines Zielbereichs.",
+            "Halte das letzte Wort leicht, als könnte der Satz gleich weitergehen.",
+            "Übe im Wechsel Aussage und Frage. Ja-Nein-Fragen wie „Kommst du mit?“ steigen am Ende meist. W-Fragen wie „Wann fährt der nächste Zug?“ fallen meist sanft, genau wie Aussagen.",
+            "Nicht jede Aussage braucht ein Hochziehen am Ende. Das klingt sonst schnell unsicher.",
+            "Nimm drei Sätze auf und prüf in der Aufnahme die Satzenden."
+          ],
+          "examples": [
+            "Ich gehe heute Abend ins Kino.",
+            "Kommst du mit?",
+            "Das war wirklich ein schöner Tag.",
+            "Ich nehme den Bus um acht.",
+            "Wann fährt der nächste Zug?"
+          ],
+          "checks": [
+            "Kein Knarren am Satzende.",
+            "Aussagen klingen abgeschlossen, aber nicht schwer.",
+            "Ja-Nein-Fragen steigen, W-Fragen und Aussagen fallen sanft, ohne zu knarren."
+          ]
+        },
+        {
+          "id": "intonation-artikulation",
+          "title": "Klare Artikulation",
+          "goal": "Laute präzise und vorn bilden, leicht statt kräftig.",
+          "duration": "3 Minuten",
+          "steps": [
+            "Lockere Lippen und Kiefer. Sprich mehrmals „tatata, dadada, nanana, lalala“ mit der Zungenspitze vorn.",
+            "Sprich einen Zungenbrecher erst langsam und sehr deutlich, dann etwas schneller.",
+            "Bleib dabei leicht und hell. Die Deutlichkeit kommt von Zunge und Lippen, nicht von Lautstärke.",
+            "Achte auf ein helles, klares S und auf saubere Endungen wie -t, -en und -st.",
+            "Lies zum Schluss einen kurzen Text und sprich die Endungen bewusst aus.",
+            "Nimm den Text auf und hör nach, ob jedes Wort verständlich ist."
+          ],
+          "examples": [
+            "tatata, dadada, nanana, lalala",
+            "Fischers Fritz fischt frische Fische.",
+            "Zwischen zwei Zwetschgenzweigen sitzen zwei zwitschernde Schwalben.",
+            "Blaukraut bleibt Blaukraut und Brautkleid bleibt Brautkleid.",
+            "Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre."
+          ],
+          "checks": [
+            "In der Aufnahme verstehst du jedes Wort.",
+            "Der Kiefer bleibt locker, nichts wird gepresst.",
+            "Die Konsonanten sind klar, aber nicht übertrieben gezischt."
+          ]
+        }
+      ],
+      "pitfalls": [
+        "Die Melodie so übertreiben, dass es künstlich oder kindlich klingt.",
+        "Jede Aussage wie eine Frage enden lassen.",
+        "Am Satzende ins Knarren fallen.",
+        "Zu schnell sprechen und Endungen verschlucken.",
+        "Klischees nachahmen, statt deinen eigenen Ausdruck zu finden."
+      ],
+      "safety": [
+        "Auch bei großer Melodie oben nicht drücken.",
+        "Zungenbrecher locker sprechen, ohne Spannung im Kiefer.",
+        "Wenn du müde bist, lieber leise und kurz üben."
+      ]
+    },
+    {
+      "id": "stimmgesundheit",
+      "title": "Stimmgesundheit & Routine",
+      "subtitle": "Gesund üben, Warnsignale kennen, kurz und regelmäßig",
+      "focus": false,
+      "intro": "Deine Stimme braucht Pflege und Pausen, genau wie jeder Muskel. Kurze, regelmäßige Einheiten bringen mehr als seltene, lange. Diese App begleitet dein Üben, ersetzt aber keine Logopädie und keine ärztliche Untersuchung. Am besten lässt du dich von einer logopädischen Praxis mit Erfahrung in Stimmfeminisierung begleiten.",
+      "why": "Die Stimme auf neue Weise zu benutzen, kann ermüden und bei Überlastung die Stimmlippen schädigen. Wer früh auf Warnsignale achtet, kann gesund und langfristig üben. Eine feste Routine verbindet alle Techniken und macht deine Fortschritte in den Aufnahmen hörbar.",
+      "howToFind": [
+        "Trink über den Tag verteilt genug Wasser. Feuchte Schleimhäute schwingen leichter.",
+        "Plane Stimmpausen ein, auch im Alltag.",
+        "Achte nach dem Üben auf dein Gefühl: Leicht und wach ist gut, müde und kratzig ist ein Stoppsignal.",
+        "Lieber täglich 10 bis 15 Minuten als einmal pro Woche eine Stunde.",
+        "Räuspere dich seltener. Schlucken oder ein Schluck Wasser hilft oft besser.",
+        "Sprich nicht gegen Lärm an und meide Rauch, auch Passivrauch."
+      ],
+      "examples": [
+        "Wochensatz: Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre.",
+        "Check-Laut: mhm",
+        "Check-Satz: Heute ist ein guter Tag.",
+        "Alltag: Hallo, ich hätte gern einen Cappuccino.",
+        "Alltag: Kannst du mir kurz helfen?"
+      ],
+      "exercises": [
+        {
+          "id": "stimmgesundheit-routine-15",
+          "title": "15-Minuten-Tagesroutine",
+          "goal": "Alle Techniken in einer kurzen, sicheren Einheit verbinden.",
+          "duration": "5–15 Minuten",
+          "steps": [
+            "Die Minuten sind ein Rahmen, kein Muss. Am Anfang reichen 5 bis 10 Minuten. Wird deine Stimme müde, hör früher auf.",
+            "Minute 0–2: Körper lockern. Schultern kreisen, Kiefer ausschütteln, ruhig atmen. Ein Schluck Wasser.",
+            "Minute 2–5: Aufwärmen. Strohhalm oder Lippenflattern mit sanften Gleitern.",
+            "Minute 5–7: Tonhöhe. Zielton summen, dann „mhm, ja“ und Zählen auf dem Zielton.",
+            "Minute 7–9: Resonanz. Großer Hund, kleiner Hund, dann „ih“-Aufhellen mit ein paar Wörtern.",
+            "Minute 9–11: Twang. Kennst du ihn schon aus dem Bereich „Twang“, such kurz den hellen, kleinen Klang und sprich ein paar Wörter damit. Leise und ohne Druck. Sonst bleib noch zwei Minuten bei der Resonanz.",
+            "Minute 11–13: Stimmgewicht und Melodie. Ein paar „mhm“-Sätze, dann ein Satz mit verschiedenen Gefühlen.",
+            "Minute 13–14: Übertragen. Nimm deinen Wochensatz oder zwei Alltagssätze auf.",
+            "Minute 14–15: Abkühlen. Ein paar sanfte Gleiter nach unten durch den Strohhalm, dann etwas trinken und kurz Stimmruhe.",
+            "Bewerte zum Schluss, wie sich deine Stimme anfühlt."
+          ],
+          "examples": [
+            "Wochensatz: Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre.",
+            "Hallo, ich hätte gern einen Cappuccino.",
+            "Kannst du mir kurz helfen?"
+          ],
+          "checks": [
+            "Nach der Routine fühlt sich die Stimme leicht an, nicht müde.",
+            "Du hast an keiner Stelle gedrückt oder gepresst.",
+            "Du hast mindestens eine Aufnahme gemacht, die du später vergleichen kannst."
+          ]
+        },
+        {
+          "id": "stimmgesundheit-check",
+          "title": "Stimm-Check vorher und nachher",
+          "goal": "Überlastung früh erkennen und Fortschritte fair vergleichen.",
+          "duration": "2 Minuten",
+          "steps": [
+            "Sprich vor dem Training ein leichtes „mhm“ und den Satz „Heute ist ein guter Tag.“ in deiner entspannten Alltagsstimme. Nimm beides auf.",
+            "Gib deiner Stimme eine Note von 1 bis 10: Wie frei und mühelos fühlt sie sich an?",
+            "Wiederhole beides nach dem Training.",
+            "Klingt die Stimme danach rauer, belegter oder müder, war die Einheit zu lang oder zu anstrengend. Kürze beim nächsten Mal.",
+            "Ist sie gleich oder besser, passt dein Pensum.",
+            "Hör dir einmal pro Woche die Aufnahmen der Woche im Vergleich an."
+          ],
+          "examples": [
+            "mhm",
+            "Heute ist ein guter Tag.",
+            "Meine Stimme fühlt sich heute … an."
+          ],
+          "checks": [
+            "Du nimmst immer denselben Laut und denselben Satz auf.",
+            "Du bewertest ehrlich, wie es sich anfühlt, nicht wie es klingen sollte.",
+            "Nach einer schlechteren Nachher-Note planst du eine kürzere oder ruhigere Einheit."
+          ]
+        }
+      ],
+      "pitfalls": [
+        "Zu lange am Stück üben, besonders am Anfang.",
+        "Mit Erkältung oder Heiserkeit trotzdem trainieren.",
+        "Verpasste Tage an einem Tag nachholen wollen.",
+        "Alles sofort im Alltag umsetzen wollen. Beginne mit kurzen, entspannten Situationen.",
+        "Sich ständig räuspern."
+      ],
+      "safety": [
+        "Bei Schmerzen, Brennen oder Druckgefühl beim Sprechen sofort aufhören.",
+        "Heiserkeit, die länger als zwei Wochen anhält, lass bitte in einer HNO-Praxis oder Phoniatrie abklären.",
+        "Bei Atemnot, Schluckbeschwerden oder starken Schmerzen sofort ärztlichen Rat holen.",
+        "Bei wiederkehrender Heiserkeit, schneller Stimmermüdung oder Unsicherheit hilft Logopädie. Damit die Krankenkasse die Kosten übernimmt, brauchst du meist eine ärztliche Verordnung.",
+        "Bist du heiser, flüstere nicht, sondern sprich wenig und leise oder gönn dir Stimmruhe.",
+        "Diese App ersetzt keine Logopädie und keine ärztliche Untersuchung."
+      ]
     }
   ],
-  "sources": [{ "title": "Platzhalter", "url": "https://example.org" }]
+  "sources": [
+    {
+      "title": "Hähnel, T. (2012): Analysis of Vocal Recordings: Twang. Hochschule für Musik Franz Liszt Weimar",
+      "url": "https://www.hfm-weimar.de/popvoices/media/method_twang/twang.pdf"
+    },
+    {
+      "title": "Sundberg, J. & Thalén, M. (2010): What is \"Twang\"? Journal of Voice 24(6), 654–660",
+      "url": "https://doi.org/10.1016/j.jvoice.2009.03.003"
+    },
+    {
+      "title": "Lombard, L. E. & Steinhauer, K. M. (2007): A novel treatment for hypophonic voice: Twang therapy. Journal of Voice 21(3), 294–299",
+      "url": "https://doi.org/10.1016/j.jvoice.2005.12.006"
+    },
+    {
+      "title": "Bøyesen, B. & Hide, Ø. (2024): Using Twang and Medialization Techniques to Gain Feminine-Sounding Speech in Trans Women. Journal of Voice (PMID 39550323)",
+      "url": "https://doi.org/10.1016/j.jvoice.2024.10.020"
+    },
+    {
+      "title": "Steinhauer, K. M., Rekart, D. M. & Keaten, J. (1992): Nasality in modal speech and twang qualities: Physiologic, acoustic, and perceptual differences (ASA 124th Meeting)",
+      "url": "https://auditory.org/asamtgs/asa92nwo/2pSP/2pSP13.html"
+    },
+    {
+      "title": "Perna, N. (2020): Nasality Deconstructed. Journal of Singing 76(4), 429–432",
+      "url": "https://www.nats.org/_Library/JOS_On_Point/JOS-076-04-2020-429.pdf"
+    },
+    {
+      "title": "Saldías, M. et al. (2021): The vocal tract in loud twang-like singing while producing high and low pitches. Journal of Voice",
+      "url": "https://trepo.tuni.fi/bitstream/10024/142180/1/the_vocal_tract_in_loud_2021.pdf"
+    },
+    {
+      "title": "Lott, J. (2014): The Use of the Twang Technique in Voice Therapy. Perspectives on Voice and Voice Disorders 24(3), 119–123",
+      "url": "https://doi.org/10.1044/vvd24.3.119"
+    },
+    {
+      "title": "Frimley Health NHS Foundation Trust: Healthy volume for speech and singing – What is twang?",
+      "url": "https://www.fhft.nhs.uk/patients-and-visitors/patient-information-library/twang"
+    },
+    {
+      "title": "Complete Vocal Institute: Twanging the epiglottic funnel",
+      "url": "https://completevocalinstitute.com/twanging-the-epiglottic-funnel/"
+    },
+    {
+      "title": "bonedo.de: Wofür ist das Gaumensegel beim Singen gut?",
+      "url": "https://www.bonedo.de/artikel/wofuer-ist-das-gaumensegel-beim-singen-gut/"
+    },
+    {
+      "title": "ASHA Practice Portal: Resonance Disorders (Assessment, nasal occlusion test)",
+      "url": "https://www.asha.org/practice-portal/clinical-topics/resonance-disorders/"
+    },
+    {
+      "title": "Leung, Y., Oates, J. & Chan, S. P. (2018): Voice, Articulation, and Prosody Contribute to Listener Perceptions of Speaker Gender. JSLHR 61(2), 266–297",
+      "url": "https://doi.org/10.1044/2017_JSLHR-S-17-0067"
+    },
+    {
+      "title": "Hillenbrand, J. M. & Clark, M. J. (2009): The role of f0 and formant frequencies in distinguishing the voices of men and women. Attention, Perception, & Psychophysics 71(5), 1150–1166",
+      "url": "https://doi.org/10.3758/APP.71.5.1150"
+    },
+    {
+      "title": "Carew, L., Dacakis, G. & Oates, J. (2007): The effectiveness of oral resonance therapy on the perception of femininity of voice in male-to-female transsexuals. Journal of Voice 21(5), 591–603",
+      "url": "https://doi.org/10.1016/j.jvoice.2006.05.005"
+    },
+    {
+      "title": "Kawitzky, D. & McAllister, T. (2020): The Effect of Formant Biofeedback on the Feminization of Voice in Transgender Women. Journal of Voice 34(1), 53–67",
+      "url": "https://doi.org/10.1016/j.jvoice.2018.07.017"
+    },
+    {
+      "title": "Zhang, Z., Zhang, J. & Kreiman, J. (2022): Effects of laryngeal manipulations on voice gender perception. Proc. Interspeech 2022",
+      "url": "https://doi.org/10.21437/Interspeech.2022-10815"
+    },
+    {
+      "title": "Rubin, A. D. et al. (2006): Laryngeal hyperfunction during whispering: reality or myth? Journal of Voice 20(1), 121–127",
+      "url": "https://doi.org/10.1016/j.jvoice.2004.10.007"
+    },
+    {
+      "title": "Well Said Toronto Speech Therapy (2021): Breaking Down Voice Feminization",
+      "url": "https://www.torontospeechtherapy.com/blog/2021/breaking-down-voice-feminization/"
+    },
+    {
+      "title": "Wikipedia: Voice therapy (transgender)",
+      "url": "https://en.wikipedia.org/wiki/Voice_therapy_(transgender)"
+    },
+    {
+      "title": "NIDCD: Hoarseness",
+      "url": "https://www.nidcd.nih.gov/health/hoarseness"
+    },
+    {
+      "title": "Leyns et al. (2021): Effects of speech therapy for transgender women – A systematic review (International Journal of Transgender Health)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10553375/"
+    },
+    {
+      "title": "Villas-Bôas et al. (2021): Acoustic Measures of Brazilian Transgender Women's Voices – A Case-Control Study (Frontiers in Psychology), zitiert Spencer 1988, Dacakis 2002, Gelfer & Schofield 2000, Gorham-Rowan & Morris 2006",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8203313/"
+    },
+    {
+      "title": "Rosi & McGettigan (2025): Voice gender diversity: expression, perception and acoustics (Royal Society Open Science)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12539971/"
+    },
+    {
+      "title": "Kapsner-Smith, Hunter, Kirkham, Cox & Titze (2015): A Randomized Controlled Trial of Two Semi-Occluded Vocal Tract Voice Therapy Protocols (JSLHR)",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4610291/"
+    },
+    {
+      "title": "ASHA: Gender-Affirming Voice and Communication Change for Transgender and Gender-Diverse People",
+      "url": "https://www.asha.org/public/speech/disorders/voice-and-communication-change-for-transgender-people/"
+    },
+    {
+      "title": "ASHA: Gender-Affirming Voice Therapy Advocacy (Hinweis auf Ermüdung und Schädigung bei erzwungener Stimmgebung)",
+      "url": "https://www.asha.org/advocacy/gender-affirming-voice-therapy/"
+    },
+    {
+      "title": "ASHA Perspectives SIG 10 (2017): Combining Voice, Speech Science and Art Approaches to Resonant Challenges in Transgender Voice and Communication Training",
+      "url": "https://pubs.asha.org/doi/epdf/10.1044/persp2.SIG10.74"
+    },
+    {
+      "title": "National NSSLHA Blog (2024): The Importance of Resonance in Gender-Affirming Voice Therapy",
+      "url": "https://blog.nsslha.org/2024/06/19/the-importance-of-resonance-in-gender-affirming-voice-therapy/"
+    },
+    {
+      "title": "NIDCD: Taking Care of Your Voice",
+      "url": "https://www.nidcd.nih.gov/health/taking-care-your-voice"
+    },
+    {
+      "title": "Pharmazeutische Zeitung: Gründe für die Stimmabgabe (Heiserkeit, wann zum HNO-Arzt oder Phoniater)",
+      "url": "https://www.pharmazeutische-zeitung.de/ausgabe-132015/gruende-fuer-die-stimmabgabe/"
+    },
+    {
+      "title": "Leipziger Internet Zeitung (2017): Leipziger Forschungskonferenz – Wie die Stimme unsere Beziehungen prägt (Prof. Michael Fuchs zur tiefer gewordenen Frauenstimme)",
+      "url": "https://www.l-iz.de/melder/wortmelder/2017/02/leipziger-forschungskonferenz-wie-die-stimme-unsere-beziehungen-praegt-167139"
+    },
+    {
+      "title": "bonedo.de: Estill Voice Training (EVT) – die 13 Figures for Voice Control",
+      "url": "https://www.bonedo.de/artikel/einzelansicht/estill-voice-training-evt.html"
+    },
+    {
+      "title": "Estill Voice International: EVT Hand Signals (Body-Cover: thick, thin, stiff, slack)",
+      "url": "https://estillvoice.com/2022/04/blog-evthandsignals/"
+    },
+    {
+      "title": "Aesop op Platt (Universität Oldenburg): Nordwind und Sonne, hochdeutsche Fassung",
+      "url": "https://uol.de/aesop-op-platt/nordwind-und-sonne"
+    },
+    {
+      "title": "Wikipedia: The North Wind and the Sun (Verwendung als Standardtext im Handbook of the IPA)",
+      "url": "https://en.wikipedia.org/wiki/The_North_Wind_and_the_Sun"
+    },
+    {
+      "title": "IDS Mannheim, Grammis: Satztypen und Grenztonmuster (Entscheidungsfragen steigend, Ergänzungsfragen fallend)",
+      "url": "https://grammis.ids-mannheim.de/systematische-grammatik/2340"
+    },
+    {
+      "title": "Wikipedia: Glottisschlag (fester Stimmeinsatz im Deutschen)",
+      "url": "https://de.wikipedia.org/wiki/Glottisschlag"
+    },
+    {
+      "title": "gesund.bund.de: Heilmittel (Logopädie als Kassenleistung nur mit ärztlicher Verordnung)",
+      "url": "https://gesund.bund.de/heilmittel"
+    }
+  ]
 }
