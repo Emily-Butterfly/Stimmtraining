@@ -67,7 +67,8 @@ import java.io.File
  * oder entfernen. Ein Tipp auf das Foto öffnet es im Vollbild mit Zoom.
  *
  * [cameraTarget] liefert die Content-URI, in die die Kamera-App schreiben soll;
- * [onCameraResult] wird aufgerufen, sobald dort ein Foto liegt.
+ * [onCameraResult] wird aufgerufen, sobald dort ein Foto liegt. Mit [enabled] = false
+ * lassen sich keine Fotos aufnehmen, wählen oder entfernen (z. B. während einer Aufnahme).
  */
 @Composable
 fun PhotoSection(
@@ -78,8 +79,10 @@ fun PhotoSection(
     onPicked: (Uri) -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val context = LocalContext.current
+    val canChange = enabled && !busy
     var showViewer by remember { mutableStateOf(false) }
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) onCameraResult()
@@ -120,17 +123,17 @@ fun PhotoSection(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = openCamera, enabled = !busy) {
+                TextButton(onClick = openCamera, enabled = canChange) {
                     Icon(Icons.Outlined.PhotoCamera, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Neues Foto")
                 }
-                TextButton(onClick = openGallery, enabled = !busy) {
+                TextButton(onClick = openGallery, enabled = canChange) {
                     Icon(Icons.Outlined.Image, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Galerie")
                 }
-                TextButton(onClick = onRemove, enabled = !busy) {
+                TextButton(onClick = onRemove, enabled = canChange) {
                     Icon(Icons.Outlined.Delete, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Entfernen")
@@ -141,17 +144,21 @@ fun PhotoSection(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Foto vom Text", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "Fotografiere den Text, den du liest – er wird dir dann beim Aufnehmen angezeigt.",
+                        if (enabled) {
+                            "Fotografiere den Text, den du liest – er wird dir dann beim Aufnehmen angezeigt."
+                        } else {
+                            "Während der Aufnahme lässt sich kein Foto hinzufügen."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(onClick = openCamera, enabled = !busy, modifier = Modifier.weight(1f)) {
+                        FilledTonalButton(onClick = openCamera, enabled = canChange, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Outlined.PhotoCamera, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text("Kamera")
                         }
-                        OutlinedButton(onClick = openGallery, enabled = !busy, modifier = Modifier.weight(1f)) {
+                        OutlinedButton(onClick = openGallery, enabled = canChange, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Outlined.Image, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text("Galerie")

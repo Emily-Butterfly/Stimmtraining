@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 
 /** Ändert an einer gespeicherten Aufnahme das Foto: behalten, entfernen oder ersetzen. */
@@ -21,7 +22,10 @@ class RecordingRepository(
 
     fun observe(id: Long): Flow<Recording?> = dao.observe(id)
 
-    /** Übernimmt die Entwurfsdateien dauerhaft und legt die Aufnahme an. */
+    /**
+     * Übernimmt die Entwurfsdateien dauerhaft und legt die Aufnahme an. Schlägt etwas fehl,
+     * liegen die Entwürfe danach wieder an ihrem alten Platz, sodass erneutes Speichern geht.
+     */
     suspend fun create(
         draftAudio: File,
         draftPhoto: File?,
@@ -29,44 +33,23 @@ class RecordingRepository(
         durationMs: Long,
         params: RecordingParams,
     ): Long = withContext(Dispatchers.IO) {
+        if (!draftAudio.isFile) throw IOException("Die Aufnahme-Datei ist nicht mehr vorhanden.")
         val uuid = UUID.randomUUID().toString()
         val audioName = "$uuid.m4a"
-        FileStore.move(draftAudio, files.audio(audioName))
-        val photoName = draftPhoto?.let { photo ->
-            newPhotoName(uuid).also { FileStore.move(photo, files.photo(it)) }
-        }
-        val now = System.currentTimeMillis()
-        dao.insert(
-            Recording(
-                uuid = uuid,
-                recordedAt = recordedAt,
-                durationMs = durationMs,
-                audioFile = audioName,
-                photoFile = photoName,
-                title = params.title.trim(),
-                exercise = params.exercise.trim(),
-                warmedUp = params.warmedUp,
-                warmUpMinutes = params.warmUpMinutesOrNull,
-                voiceCondition = params.voiceCondition,
-                selfRating = params.selfRating,
-                notes = params.notes.trim(),
-                updatedAt = now,
-            ),
-        )
-    }
-
-    suspend fun update(id: Long, params: RecordingParams, photoChange: PhotoChange) =
-        withContext(Dispatchers.IO) {
-            val current = dao.get(id) ?: return@withContext
-            val photoName = when (photoChange) {
-                PhotoChange.Keep -> current.photoFile
-                PhotoChange.Remove -> null
-                is PhotoChange.Replace -> newPhotoName(current.uuid).also {
-                    FileStore.move(photoChange.draft, files.photo(it))
-                }
-            }
-            dao.update(
-                current.copy(
+        val audioTarget = files.audio(audioName)
+        // Ein verschwundener Foto-Entwurf soll nicht die ganze Aufnahme kosten.
+        val photo = draftPhoto?.takeIf { it.isFile }
+        val photoName = photo?.let { newPhotoName(uuid) }
+        val photoTarget = photoName?.let(files::photo)
+        FileStore.move(draftAudio, audioTarget)
+        try {
+            if (photo != null && photoTarget != null) FileStore.move(photo, photoTarget)
+            dao.insert(
+                Recording(
+                    uuid = uuid,
+                    recordedAt = recordedAt,
+                    durationMs = durationMs,
+                    audioFile = audioName,
                     photoFile = photoName,
                     title = params.title.trim(),
                     exercise = params.exercise.trim(),
@@ -78,6 +61,42 @@ class RecordingRepository(
                     updatedAt = System.currentTimeMillis(),
                 ),
             )
+        } catch (e: Exception) {
+            if (photo != null && photoTarget != null && photoTarget.isFile) runCatching { FileStore.move(photoTarget, photo) }
+            runCatching { FileStore.move(audioTarget, draftAudio) }
+            throw e
+        }
+    }
+
+    suspend fun update(id: Long, params: RecordingParams, photoChange: PhotoChange) =
+        withContext(Dispatchers.IO) {
+            val current = dao.get(id) ?: return@withContext
+            val replacement = (photoChange as? PhotoChange.Replace)?.draft?.takeIf { it.isFile }
+            val photoName = when (photoChange) {
+                PhotoChange.Keep -> current.photoFile
+                PhotoChange.Remove -> null
+                is PhotoChange.Replace -> if (replacement != null) newPhotoName(current.uuid) else current.photoFile
+            }
+            val replacementTarget = if (replacement != null && photoName != null) files.photo(photoName) else null
+            if (replacement != null && replacementTarget != null) FileStore.move(replacement, replacementTarget)
+            try {
+                dao.update(
+                    current.copy(
+                        photoFile = photoName,
+                        title = params.title.trim(),
+                        exercise = params.exercise.trim(),
+                        warmedUp = params.warmedUp,
+                        warmUpMinutes = params.warmUpMinutesOrNull,
+                        voiceCondition = params.voiceCondition,
+                        selfRating = params.selfRating,
+                        notes = params.notes.trim(),
+                        updatedAt = System.currentTimeMillis(),
+                    ),
+                )
+            } catch (e: Exception) {
+                if (replacement != null && replacementTarget != null) runCatching { FileStore.move(replacementTarget, replacement) }
+                throw e
+            }
             if (current.photoFile != null && current.photoFile != photoName) {
                 files.photo(current.photoFile).delete()
             }

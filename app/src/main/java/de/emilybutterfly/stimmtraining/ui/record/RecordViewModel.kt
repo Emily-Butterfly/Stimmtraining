@@ -3,17 +3,21 @@ package de.emilybutterfly.stimmtraining.ui.record
 import android.app.Application
 import android.net.Uri
 import android.os.SystemClock
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import de.emilybutterfly.stimmtraining.AppContainer
 import de.emilybutterfly.stimmtraining.audio.AudioRecorder
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.ui.app
+import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
 import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
+import de.emilybutterfly.stimmtraining.ui.putParams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -21,6 +25,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -53,9 +59,10 @@ data class RecordUiState(
 class RecordViewModel(
     private val app: Application,
     private val container: AppContainer,
+    private val savedState: SavedStateHandle,
 ) : ViewModel() {
     private val recorder = AudioRecorder(app)
-    private val _state = MutableStateFlow(RecordUiState())
+    private val _state = MutableStateFlow(restore())
     val state: StateFlow<RecordUiState> = _state.asStateFlow()
 
     private var recordingFile: File? = null
@@ -63,6 +70,58 @@ class RecordViewModel(
     private var segmentStartedAt = 0L
     private var ticker: Job? = null
     private var saved = false
+
+    init {
+        // Entwurf sichern, damit er überlebt, wenn Android die App im Hintergrund beendet
+        // (z. B. während die Kamera-App offen ist).
+        viewModelScope.launch {
+            _state.map(::persistable).distinctUntilChanged().collect(::persist)
+        }
+    }
+
+    private data class Persistable(
+        val params: RecordingParams,
+        val photo: String?,
+        val audio: String?,
+        val recordedAt: Long?,
+        val durationMs: Long,
+    )
+
+    private fun persistable(state: RecordUiState): Persistable {
+        val done = state.phase == RecorderPhase.Done
+        return Persistable(
+            params = state.params,
+            photo = state.photo?.absolutePath,
+            audio = if (done) state.audio?.absolutePath else null,
+            recordedAt = if (done) state.recordedAt else null,
+            durationMs = if (done) state.durationMs else 0,
+        )
+    }
+
+    private fun persist(p: Persistable) {
+        savedState.putParams(KEY_PARAMS, p.params)
+        savedState[KEY_PHOTO] = p.photo
+        savedState[KEY_AUDIO] = p.audio
+        savedState[KEY_RECORDED_AT] = p.recordedAt
+        savedState[KEY_DURATION] = p.durationMs
+    }
+
+    private fun restore(): RecordUiState {
+        val params = savedState.getParams(KEY_PARAMS)
+        val photo = savedState.get<String>(KEY_PHOTO)?.let(::File)?.takeIf { it.isFile }
+        val audio = savedState.get<String>(KEY_AUDIO)?.let(::File)?.takeIf { it.isFile && it.length() > 0 }
+            ?: return RecordUiState(params = params, photo = photo)
+        val duration = savedState[KEY_DURATION] ?: 0L
+        return RecordUiState(
+            params = params,
+            photo = photo,
+            phase = RecorderPhase.Done,
+            audio = audio,
+            recordedAt = savedState[KEY_RECORDED_AT],
+            durationMs = duration,
+            elapsedMs = duration,
+        )
+    }
 
     fun updateParams(params: RecordingParams) = _state.update { it.copy(params = params) }
 
@@ -185,11 +244,17 @@ class RecordViewModel(
         }
     }
 
-    /** Im Hintergrund liefert Android kein Mikrofonsignal mehr, daher wird pausiert. */
+    /**
+     * Im Hintergrund liefert Android kein Mikrofonsignal mehr, und die App kann jederzeit
+     * beendet werden. Eine nur pausierte MP4-Datei wäre dann unbrauchbar, deshalb wird die
+     * Aufnahme abgeschlossen; sie lässt sich danach anhören und speichern.
+     */
     fun onAppBackgrounded() {
-        if (_state.value.phase == RecorderPhase.Recording) {
-            pauseOrResume()
-            _state.update { it.copy(message = "Aufnahme pausiert, weil die App im Hintergrund war.") }
+        if (_state.value.isRecording) {
+            stopRecording()
+            if (_state.value.phase == RecorderPhase.Done) {
+                _state.update { it.copy(message = "Aufnahme beendet, weil die App in den Hintergrund gewechselt ist.") }
+            }
         }
     }
 
@@ -253,10 +318,16 @@ class RecordViewModel(
     }
 
     companion object {
+        internal const val KEY_PARAMS = "params"
+        internal const val KEY_PHOTO = "photo"
+        internal const val KEY_AUDIO = "audio"
+        internal const val KEY_RECORDED_AT = "recordedAt"
+        internal const val KEY_DURATION = "durationMs"
+
         val Factory = viewModelFactory {
             initializer {
                 val app = app()
-                RecordViewModel(app, app.container)
+                RecordViewModel(app, app.container, createSavedStateHandle())
             }
         }
     }

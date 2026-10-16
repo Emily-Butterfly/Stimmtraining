@@ -112,7 +112,9 @@ class BackupViewModel(
             runCatching { resolver.releasePersistableUriPermission(previous, flags) }
         }
         settings.setFolder(uri)
-        if (settings.current().interval == AutoBackupInterval.OFF) setInterval(AutoBackupInterval.WEEKLY)
+        // Auch bei schon gewählter Häufigkeit neu planen, z. B. nach dem Umzug auf ein neues Gerät.
+        val interval = settings.current().interval.takeIf { it != AutoBackupInterval.OFF } ?: AutoBackupInterval.WEEKLY
+        setInterval(interval)
     }
 
     fun setInterval(interval: AutoBackupInterval) {

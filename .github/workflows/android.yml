@@ -49,8 +49,14 @@ jobs:
         if: github.event_name != 'pull_request' && github.ref_name == github.event.repository.default_branch
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: v1.0.${{ github.run_number }}
         run: |
-          gh release create "v1.0.${{ github.run_number }}" Stimmtraining-*.apk \
-            --target "${{ github.sha }}" \
-            --title "Stimmtraining 1.0.${{ github.run_number }}" \
-            --notes "Zum Installieren die APK auf dem Handy herunterladen und öffnen. Vor einem Update mit neuem Signatur-Schlüssel bitte zuerst in der App ein Backup erstellen."
+          # Bei "Re-run" gibt es das Release schon; dann nur die APK ersetzen.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" Stimmtraining-*.apk --clobber
+          else
+            gh release create "$TAG" Stimmtraining-*.apk \
+              --target "${{ github.sha }}" \
+              --title "Stimmtraining 1.0.${{ github.run_number }}" \
+              --notes "Zum Installieren die APK auf dem Handy herunterladen und öffnen. Vor einem Update mit neuem Signatur-Schlüssel bitte zuerst in der App ein Backup erstellen."
+          fi

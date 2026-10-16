@@ -24,6 +24,9 @@ interface RecordingDao {
     @Query("SELECT uuid FROM recordings")
     suspend fun allUuids(): List<String>
 
+    @Query("SELECT COUNT(*) FROM recordings")
+    suspend fun count(): Int
+
     /** Ändert sich bei jedem Hinzufügen, Bearbeiten oder Löschen einer Aufnahme. */
     @Query("SELECT COUNT(*) || ':' || IFNULL(MAX(updatedAt), 0) || ':' || IFNULL(SUM(id), 0) FROM recordings")
     suspend fun fingerprint(): String

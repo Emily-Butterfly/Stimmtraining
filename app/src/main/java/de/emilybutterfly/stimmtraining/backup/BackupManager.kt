@@ -1,7 +1,9 @@
 package de.emilybutterfly.stimmtraining.backup
 
+import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import de.emilybutterfly.stimmtraining.BuildConfig
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.RecordingDao
@@ -11,6 +13,7 @@ import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -28,9 +31,13 @@ class BackupManager(
     private val files: FileStore,
 ) {
     suspend fun exportTo(uri: Uri): Int = withContext(Dispatchers.IO) {
-        val output = context.contentResolver.openOutputStream(uri, "w")
-            ?: throw IOException("Die Zieldatei konnte nicht geöffnet werden.")
-        output.use { export(it) }
+        try {
+            openForWriting(context.contentResolver, uri).use { export(it) }
+        } catch (e: Exception) {
+            // Keine halbe Sicherung unter einem gültigen Namen zurücklassen.
+            runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+            throw e
+        }
     }
 
     /** Schreibt die Sicherung nach [output] (ohne es zu schließen) und liefert die Anzahl Aufnahmen. */
@@ -126,7 +133,25 @@ class BackupManager(
         }
     }
 
-    private companion object {
-        val AUDIO_EXTENSIONS = setOf("m4a", "mp4", "aac", "3gp", "ogg", "opus", "mp3", "wav")
+    companion object {
+        private val AUDIO_EXTENSIONS = setOf("m4a", "mp4", "aac", "3gp", "ogg", "opus", "mp3", "wav")
+
+        /**
+         * Öffnet [uri] zum Schreiben. "wt" kürzt eine überschriebene Datei; ohne das bliebe
+         * bei manchen Anbietern das Ende der alten, größeren Sicherung stehen.
+         */
+        fun openForWriting(resolver: ContentResolver, uri: Uri) =
+            (
+                try {
+                    resolver.openOutputStream(uri, "wt")
+                } catch (_: IllegalArgumentException) {
+                    null
+                } catch (_: UnsupportedOperationException) {
+                    null
+                } catch (_: FileNotFoundException) {
+                    null
+                }
+                ) ?: resolver.openOutputStream(uri, "w")
+                ?: throw IOException("Die Zieldatei konnte nicht geöffnet werden.")
     }
 }

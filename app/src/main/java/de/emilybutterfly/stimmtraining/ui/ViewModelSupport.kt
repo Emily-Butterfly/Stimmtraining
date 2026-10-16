@@ -2,17 +2,40 @@ package de.emilybutterfly.stimmtraining.ui
 
 import android.content.Context
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.ImageImporter
+import de.emilybutterfly.stimmtraining.data.RecordingParams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
 fun CreationExtras.app(): StimmtrainingApp =
     checkNotNull(this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]) as StimmtrainingApp
+
+/** Legt Formularwerte so ab, dass sie das Beenden der App durch Android überstehen. */
+fun SavedStateHandle.putParams(prefix: String, params: RecordingParams) {
+    this["$prefix.title"] = params.title
+    this["$prefix.exercise"] = params.exercise
+    this["$prefix.warmedUp"] = params.warmedUp
+    this["$prefix.warmUpMinutes"] = params.warmUpMinutes
+    this["$prefix.voiceCondition"] = params.voiceCondition
+    this["$prefix.selfRating"] = params.selfRating
+    this["$prefix.notes"] = params.notes
+}
+
+fun SavedStateHandle.getParams(prefix: String) = RecordingParams(
+    title = get<String>("$prefix.title") ?: "",
+    exercise = get<String>("$prefix.exercise") ?: "",
+    warmedUp = get<Boolean>("$prefix.warmedUp") ?: false,
+    warmUpMinutes = get<String>("$prefix.warmUpMinutes") ?: "",
+    voiceCondition = get<Int>("$prefix.voiceCondition"),
+    selfRating = get<Int>("$prefix.selfRating"),
+    notes = get<String>("$prefix.notes") ?: "",
+)
 
 /** Bereitet die Zieldatei für ein Kamerafoto vor und liefert die URI für die Kamera-App. */
 fun FileStore.prepareCameraCapture(): Uri {

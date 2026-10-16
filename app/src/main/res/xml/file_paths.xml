@@ -2,6 +2,6 @@
 <paths>
     <files-path name="recordings" path="recordings/" />
     <files-path name="photos" path="photos/" />
-    <cache-path name="drafts" path="drafts/" />
+    <files-path name="drafts" path="drafts/" />
     <cache-path name="shared" path="shared/" />
 </paths>

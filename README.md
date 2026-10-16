@@ -25,11 +25,15 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
   - *Backup wiederherstellen*: ergänzt nur fehlende Aufnahmen, überschreibt oder löscht nichts.
     Damit klappt auch der Umzug auf ein neues Handy.
   - *Automatisches Backup*: täglich oder wöchentlich in einen gewählten Ordner, nur wenn sich
-    etwas geändert hat; die letzten 5 Sicherungen bleiben erhalten.
+    etwas geändert hat. Die letzten 5 automatischen Sicherungen
+    (`Stimmtraining-Auto-Backup-….zip`) bleiben erhalten; andere Dateien im Ordner, z. B.
+    manuelle Sicherungen, werden nie gelöscht.
 
 Alle Daten bleiben auf dem Handy, es gibt keinen Server und kein Konto. Androids eigenes
-Cloud-Backup ist bewusst aus (Audiodateien sprengen dessen 25-MB-Grenze); beim
-Gerätewechsel per Kabel/Direktübertragung werden die Daten aber mitgenommen.
+Cloud-Backup ist bewusst aus (Audiodateien sprengen dessen 25-MB-Grenze). Die Direktübertragung
+beim Gerätewechsel nimmt die Daten nur mit, wenn das alte Handy Android 12 oder neuer hat –
+**vor einem Handywechsel daher immer „Backup erstellen“ und auf dem neuen Handy wiederherstellen.**
+Das automatische Backup muss auf dem neuen Gerät neu eingerichtet werden (Ordner wählen).
 
 ## Installieren
 
@@ -67,8 +71,10 @@ die neue installieren und das Backup wiederherstellen.
 - Kotlin, Jetpack Compose (Material 3), Room, WorkManager
 - `minSdk` 26 (Android 8.0), `targetSdk` 36
 - Bauen und testen: `./gradlew testDebugUnitTest assembleDebug`
-- Die Tests prüfen u. a. ein vollständiges Backup → neues Gerät → Wiederherstellen mit echter
-  Datenbank (Robolectric) und öffnen jede Ansicht der App einmal.
+- Die Tests (Robolectric) prüfen u. a. ein vollständiges Backup → neues Gerät → Wiederherstellen
+  mit echter Datenbank, den Foto-Import (Drehung, Verkleinerung), dass ein fehlgeschlagenes
+  Speichern nichts verliert, dass ein Entwurf das Beenden der App übersteht, die Rotation der
+  automatischen Backups, und sie öffnen jede Ansicht der App einmal.
 
 ### Aufbau
 

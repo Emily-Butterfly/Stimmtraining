@@ -19,9 +19,10 @@ object ImageImporter {
     private const val QUALITY = 88
 
     fun import(resolver: ContentResolver, source: Uri, target: File) {
+        // Mit inJustDecodeBounds liefert decodeStream immer null; nur die Maße werden gefüllt.
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(source)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            ?: throw IOException("Bild konnte nicht geöffnet werden")
+        val boundsStream = resolver.openInputStream(source) ?: throw IOException("Bild konnte nicht geöffnet werden")
+        boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IOException("Datei ist kein lesbares Bild")
 
         var sampleSize = 1

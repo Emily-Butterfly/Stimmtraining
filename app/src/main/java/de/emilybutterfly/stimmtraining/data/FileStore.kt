@@ -11,7 +11,8 @@ import java.util.UUID
 class FileStore(private val context: Context) {
     val audioDir: File get() = File(context.filesDir, "recordings").apply { mkdirs() }
     val photoDir: File get() = File(context.filesDir, "photos").apply { mkdirs() }
-    private val draftDir: File get() = File(context.cacheDir, "drafts").apply { mkdirs() }
+    /** Nicht im Cache: Android darf den Cache leeren, bevor eine Aufnahme gespeichert ist. */
+    private val draftDir: File get() = File(context.filesDir, "drafts").apply { mkdirs() }
 
     fun audio(name: String) = File(audioDir, name)
     fun photo(name: String) = File(photoDir, name)

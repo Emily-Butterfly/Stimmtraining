@@ -175,6 +175,8 @@ fun RecordScreen(
                 onCameraResult = viewModel::onCameraPhoto,
                 onPicked = viewModel::onPhotoPicked,
                 onRemove = viewModel::removePhoto,
+                // Kamera oder Galerie würden die App in den Hintergrund schicken und die Aufnahme beenden.
+                enabled = !state.isRecording,
             )
             ParameterForm(params = state.params, onChange = viewModel::updateParams)
         }

@@ -39,6 +39,11 @@ class AutoBackup(
         }
         val fingerprint = dao.fingerprint()
         if (!force && fingerprint == settings.lastFingerprint) return true // nichts Neues
+        if (dao.count() == 0) {
+            // Z. B. nach einer Neuinstallation: eine leere Sicherung würde echte verdrängen.
+            if (force) settings.recordFailure(System.currentTimeMillis(), "Noch keine Aufnahmen – es gibt nichts zu sichern.")
+            return true
+        }
         return try {
             val tree = DocumentFile.fromTreeUri(context, folder)
             if (tree == null || !tree.isDirectory || !tree.canWrite()) {
@@ -48,8 +53,7 @@ class AutoBackup(
             val document = tree.createFile("application/zip", "$FILE_PREFIX$stamp.zip")
                 ?: throw IOException("Die Backup-Datei konnte nicht angelegt werden.")
             val count = try {
-                context.contentResolver.openOutputStream(document.uri, "w")?.use { manager.export(it) }
-                    ?: throw IOException("Die Backup-Datei konnte nicht geschrieben werden.")
+                BackupManager.openForWriting(context.contentResolver, document.uri).use { manager.export(it) }
             } catch (e: Exception) {
                 document.delete()
                 throw e
@@ -66,16 +70,24 @@ class AutoBackup(
     }
 
     private fun prune(tree: DocumentFile) {
-        tree.listFiles()
-            .filter { it.isFile && it.name.orEmpty().let { n -> n.startsWith(FILE_PREFIX) && n.endsWith(".zip") } }
-            .sortedByDescending { it.name }
-            .drop(KEEP)
-            .forEach { it.delete() }
+        val files = tree.listFiles().filter { it.isFile }
+        val obsolete = obsoleteBackups(files.mapNotNull { it.name }).toSet()
+        files.filter { it.name in obsolete }.forEach { it.delete() }
     }
 
     companion object {
-        const val FILE_PREFIX = "Stimmtraining-Backup-"
+        const val FILE_PREFIX = "Stimmtraining-Auto-Backup-"
         const val KEEP = 5
+
+        /** Nur genau so benannte Dateien stammen vom automatischen Backup. */
+        private val AUTO_BACKUP_NAME = Regex("""Stimmtraining-Auto-Backup-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip""")
+
+        /**
+         * Die automatischen Sicherungen, die über die neuesten [KEEP] hinausgehen. Andere
+         * Dateien im Ordner (z. B. manuelle Sicherungen) werden nie angefasst.
+         */
+        fun obsoleteBackups(names: List<String>): List<String> =
+            names.filter { AUTO_BACKUP_NAME.matches(it) }.sortedDescending().drop(KEEP)
     }
 }
 

@@ -13,8 +13,9 @@
     <!--
         Cloud-Backups von Android sind aus: Aufnahmen überschreiten schnell das 25-MB-Limit,
         und eine halbe Sicherung (Datenbank ohne Audiodateien) wäre schlimmer als keine.
-        Beim Umzug auf ein neues Gerät (Gerät-zu-Gerät) wird alles übertragen.
-        Für eigene Sicherungen gibt es das ZIP-Backup in der App.
+        Bei der Gerät-zu-Gerät-Übertragung wird alles mitgenommen, aber nur ab Android 12
+        (dataExtractionRules); darunter verhindert allowBackup="false" auch das.
+        Für eigene Sicherungen und den Handywechsel gibt es das ZIP-Backup in der App.
     -->
     <application
         android:name=".StimmtrainingApp"
