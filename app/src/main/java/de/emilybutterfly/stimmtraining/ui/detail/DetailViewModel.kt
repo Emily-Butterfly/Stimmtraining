@@ -1,0 +1,192 @@
+package de.emilybutterfly.stimmtraining.ui.detail
+
+import android.app.Application
+import android.content.Intent
+import android.net.Uri
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import de.emilybutterfly.stimmtraining.AppContainer
+import de.emilybutterfly.stimmtraining.data.PhotoChange
+import de.emilybutterfly.stimmtraining.data.Recording
+import de.emilybutterfly.stimmtraining.data.RecordingParams
+import de.emilybutterfly.stimmtraining.ui.app
+import de.emilybutterfly.stimmtraining.ui.importCameraCapture
+import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
+import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+sealed interface DetailLoad {
+    data object Loading : DetailLoad
+    data object Missing : DetailLoad
+    data class Ready(val recording: Recording) : DetailLoad
+}
+
+data class EditState(
+    val params: RecordingParams,
+    val photoChange: PhotoChange = PhotoChange.Keep,
+    val photoBusy: Boolean = false,
+    val saving: Boolean = false,
+)
+
+class DetailViewModel(
+    private val id: Long,
+    private val app: Application,
+    private val container: AppContainer,
+) : ViewModel() {
+    private val files = container.files
+
+    val load: StateFlow<DetailLoad> = container.repository.observe(id)
+        .map { if (it == null) DetailLoad.Missing else DetailLoad.Ready(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailLoad.Loading)
+
+    private val _edit = MutableStateFlow<EditState?>(null)
+    val edit: StateFlow<EditState?> = _edit.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    private val current: Recording? get() = (load.value as? DetailLoad.Ready)?.recording
+
+    fun audioFile(recording: Recording): File = files.audio(recording.audioFile)
+
+    fun photoFile(recording: Recording): File? = recording.photoFile?.let(files::photo)
+
+    /** Das Foto, das im Bearbeiten-Modus gerade angezeigt werden soll. */
+    fun editedPhoto(recording: Recording, edit: EditState): File? = when (val change = edit.photoChange) {
+        PhotoChange.Keep -> photoFile(recording)
+        PhotoChange.Remove -> null
+        is PhotoChange.Replace -> change.draft
+    }
+
+    // --- Bearbeiten ---
+
+    fun startEdit() {
+        val recording = current ?: return
+        _edit.value = EditState(params = recording.params())
+    }
+
+    fun cancelEdit() {
+        discardPhotoDraft()
+        _edit.value = null
+    }
+
+    fun updateParams(params: RecordingParams) = _edit.update { it?.copy(params = params) }
+
+    fun cameraTarget(): Uri = files.prepareCameraCapture()
+
+    fun onCameraPhoto() = importPhoto { files.importCameraCapture(app) }
+
+    fun onPhotoPicked(uri: Uri) = importPhoto { files.importDraftPhoto(app, uri) }
+
+    private fun importPhoto(load: suspend () -> File) {
+        if (_edit.value == null) return
+        viewModelScope.launch {
+            _edit.update { it?.copy(photoBusy = true) }
+            try {
+                val photo = load()
+                discardPhotoDraft()
+                if (_edit.value == null) {
+                    photo.delete()
+                } else {
+                    _edit.update { it?.copy(photoChange = PhotoChange.Replace(photo), photoBusy = false) }
+                }
+            } catch (e: Exception) {
+                _edit.update { it?.copy(photoBusy = false) }
+                _message.value = "Foto konnte nicht übernommen werden: ${e.message}"
+            }
+        }
+    }
+
+    fun removePhoto() {
+        discardPhotoDraft()
+        _edit.update { it?.copy(photoChange = PhotoChange.Remove) }
+    }
+
+    private fun discardPhotoDraft() {
+        (_edit.value?.photoChange as? PhotoChange.Replace)?.draft?.delete()
+    }
+
+    fun saveEdit() {
+        val edit = _edit.value ?: return
+        if (edit.saving || edit.photoBusy) return
+        _edit.value = edit.copy(saving = true)
+        viewModelScope.launch {
+            try {
+                withContext(NonCancellable) { container.repository.update(id, edit.params, edit.photoChange) }
+                _edit.value = null
+            } catch (e: Exception) {
+                _edit.update { it?.copy(saving = false) }
+                _message.value = "Speichern fehlgeschlagen: ${e.message}"
+            }
+        }
+    }
+
+    // --- Teilen und Löschen ---
+
+    /** Kopiert die Aufnahme mit lesbarem Dateinamen und liefert einen Teilen-Dialog. */
+    fun share(onReady: (Intent) -> Unit) {
+        val recording = current ?: return
+        viewModelScope.launch {
+            try {
+                val uri = withContext(Dispatchers.IO) {
+                    val dir = File(app.cacheDir, "shared").apply {
+                        deleteRecursively()
+                        mkdirs()
+                    }
+                    val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.ROOT).format(Date(recording.recordedAt))
+                    val target = File(dir, "Stimmtraining_$stamp.${audioFile(recording).extension}")
+                    audioFile(recording).copyTo(target, overwrite = true)
+                    files.uriFor(target)
+                }
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("audio/mp4")
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                onReady(Intent.createChooser(send, "Aufnahme teilen"))
+            } catch (e: Exception) {
+                _message.value = "Teilen nicht möglich: ${e.message}"
+            }
+        }
+    }
+
+    fun delete(onDeleted: () -> Unit) {
+        val recording = current ?: return
+        viewModelScope.launch {
+            withContext(NonCancellable) { container.repository.delete(recording) }
+            onDeleted()
+        }
+    }
+
+    fun messageShown() {
+        _message.value = null
+    }
+
+    override fun onCleared() {
+        discardPhotoDraft()
+    }
+
+    companion object {
+        fun factory(id: Long) = viewModelFactory {
+            initializer {
+                val app = app()
+                DetailViewModel(id, app, app.container)
+            }
+        }
+    }
+}

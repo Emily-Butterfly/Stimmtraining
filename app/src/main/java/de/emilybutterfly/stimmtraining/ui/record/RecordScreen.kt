@@ -1,0 +1,370 @@
+package de.emilybutterfly.stimmtraining.ui.record
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import de.emilybutterfly.stimmtraining.ui.components.AudioPlayerBar
+import de.emilybutterfly.stimmtraining.ui.components.ParameterForm
+import de.emilybutterfly.stimmtraining.ui.components.PhotoSection
+import de.emilybutterfly.stimmtraining.ui.components.formatDateTime
+import de.emilybutterfly.stimmtraining.ui.components.formatDuration
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RecordScreen(
+    onClose: () -> Unit,
+    onSaved: (Long) -> Unit,
+    viewModel: RecordViewModel = viewModel(factory = RecordViewModel.Factory),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    var confirmLeave by rememberSaveable { mutableStateOf(false) }
+    var confirmRetake by rememberSaveable { mutableStateOf(false) }
+    var permissionDenied by rememberSaveable { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) viewModel.startRecording() else permissionDenied = true
+    }
+    val startRecording = {
+        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) viewModel.startRecording() else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbar.showSnackbar(it)
+            viewModel.messageShown()
+        }
+    }
+
+    // Bildschirm anlassen, solange aufgenommen wird – man liest ja gerade.
+    val view = LocalView.current
+    DisposableEffect(state.isRecording) {
+        view.keepScreenOn = state.isRecording
+        onDispose { view.keepScreenOn = false }
+    }
+    // Beim Drehen des Bildschirms kommt ebenfalls ON_STOP – dann läuft die Aufnahme weiter.
+    val activity = LocalActivity.current
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        if (activity?.isChangingConfigurations != true) viewModel.onAppBackgrounded()
+    }
+
+    val requestClose = {
+        when {
+            state.saving -> Unit
+            state.hasDraft -> confirmLeave = true
+            else -> onClose()
+        }
+    }
+    BackHandler(enabled = state.hasDraft || state.saving) { requestClose() }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Neue Aufnahme") },
+                navigationIcon = {
+                    IconButton(onClick = requestClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    }
+                },
+            )
+        },
+        bottomBar = {
+            RecorderPanel(
+                state = state,
+                onStart = startRecording,
+                onPauseResume = viewModel::pauseOrResume,
+                onStop = viewModel::stopRecording,
+                onRetake = { confirmRetake = true },
+                onSave = { viewModel.save(onSaved) },
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            PhotoSection(
+                photo = state.photo,
+                busy = state.photoBusy,
+                cameraTarget = viewModel::cameraTarget,
+                onCameraResult = viewModel::onCameraPhoto,
+                onPicked = viewModel::onPhotoPicked,
+                onRemove = viewModel::removePhoto,
+            )
+            ParameterForm(params = state.params, onChange = viewModel::updateParams)
+        }
+    }
+
+    if (confirmLeave) {
+        AlertDialog(
+            onDismissRequest = { confirmLeave = false },
+            title = { Text("Verwerfen?") },
+            text = { Text("Die Aufnahme und deine Angaben werden nicht gespeichert.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmLeave = false
+                    viewModel.discardRecording()
+                    onClose()
+                }) { Text("Verwerfen") }
+            },
+            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Weiter bearbeiten") } },
+        )
+    }
+
+    if (confirmRetake) {
+        AlertDialog(
+            onDismissRequest = { confirmRetake = false },
+            title = { Text("Neu aufnehmen?") },
+            text = { Text("Die bisherige Aufnahme wird gelöscht. Foto und Angaben bleiben erhalten.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRetake = false
+                    viewModel.discardRecording()
+                }) { Text("Löschen") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRetake = false }) { Text("Abbrechen") } },
+        )
+    }
+
+    if (permissionDenied) {
+        AlertDialog(
+            onDismissRequest = { permissionDenied = false },
+            title = { Text("Mikrofon-Zugriff nötig") },
+            text = {
+                Text("Ohne Zugriff auf das Mikrofon kann die App nicht aufnehmen. Du kannst ihn in den App-Einstellungen erlauben.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    permissionDenied = false
+                    context.startActivity(
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                    )
+                }) { Text("Einstellungen öffnen") }
+            },
+            dismissButton = { TextButton(onClick = { permissionDenied = false }) { Text("Abbrechen") } },
+        )
+    }
+}
+
+@Composable
+private fun RecorderPanel(
+    state: RecordUiState,
+    onStart: () -> Unit,
+    onPauseResume: () -> Unit,
+    onStop: () -> Unit,
+    onRetake: () -> Unit,
+    onSave: () -> Unit,
+) {
+    Surface(tonalElevation = 3.dp, shadowElevation = 8.dp) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            state.recordedAt?.let {
+                Text(
+                    formatDateTime(it),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            when (state.phase) {
+                RecorderPhase.Idle -> {
+                    FilledIconButton(onClick = onStart, modifier = Modifier.size(72.dp)) {
+                        Icon(Icons.Filled.Mic, contentDescription = "Aufnahme starten", modifier = Modifier.size(36.dp))
+                    }
+                    Text("Tippen, um die Aufnahme zu starten", style = MaterialTheme.typography.bodySmall)
+                }
+
+                RecorderPhase.Recording, RecorderPhase.Paused -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RecordingIndicator(active = state.phase == RecorderPhase.Recording)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            formatDuration(state.elapsedMs),
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.Medium,
+                                fontFeatureSettings = "tnum",
+                            ),
+                        )
+                        if (state.phase == RecorderPhase.Paused) {
+                            Text(
+                                "  pausiert",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    LevelMeter(state.level)
+                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalIconButton(onClick = onPauseResume, modifier = Modifier.size(56.dp)) {
+                            if (state.phase == RecorderPhase.Recording) {
+                                Icon(Icons.Filled.Pause, contentDescription = "Pausieren")
+                            } else {
+                                Icon(Icons.Filled.Mic, contentDescription = "Fortsetzen")
+                            }
+                        }
+                        FilledIconButton(
+                            onClick = onStop,
+                            modifier = Modifier.size(72.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            ),
+                        ) {
+                            Icon(Icons.Filled.Stop, contentDescription = "Aufnahme beenden", modifier = Modifier.size(36.dp))
+                        }
+                    }
+                }
+
+                RecorderPhase.Done -> {
+                    state.audio?.let { AudioPlayerBar(it, Modifier.fillMaxWidth()) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = onRetake, enabled = !state.saving, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Filled.Refresh, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Neu aufnehmen")
+                        }
+                        Button(
+                            onClick = onSave,
+                            enabled = !state.saving && !state.photoBusy,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Icon(Icons.Filled.Check, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Speichern")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingIndicator(active: Boolean) {
+    val alpha = if (active) {
+        val transition = rememberInfiniteTransition(label = "rec")
+        transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.2f,
+            animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+            label = "rec-alpha",
+        ).value
+    } else {
+        0.4f
+    }
+    Box(
+        Modifier
+            .size(14.dp)
+            .alpha(alpha)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.error),
+    )
+}
+
+@Composable
+private fun LevelMeter(level: Float) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(8.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(level.coerceIn(0f, 1f))
+                .background(MaterialTheme.colorScheme.primary),
+        )
+    }
+}
