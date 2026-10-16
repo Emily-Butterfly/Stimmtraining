@@ -17,10 +17,18 @@ import de.emilybutterfly.stimmtraining.ui.detail.DetailScreen
 import de.emilybutterfly.stimmtraining.ui.list.RecordingListScreen
 import de.emilybutterfly.stimmtraining.ui.record.RecordScreen
 import de.emilybutterfly.stimmtraining.ui.theme.StimmtrainingTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) {
+            // Nur bei einem frischen Start: Dann kann kein wiederhergestellter Entwurf mehr
+            // auf diese Dateien zeigen (nach dem Beenden durch Android schon).
+            val container = (application as StimmtrainingApp).container
+            container.appScope.launch(Dispatchers.IO) { container.files.cleanOldDrafts() }
+        }
         enableEdgeToEdge()
         setContent {
             StimmtrainingTheme {

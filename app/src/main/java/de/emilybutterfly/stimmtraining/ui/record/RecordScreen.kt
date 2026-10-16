@@ -190,7 +190,7 @@ fun RecordScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirmLeave = false
-                    viewModel.discardRecording()
+                    viewModel.discardDraft()
                     onClose()
                 }) { Text("Verwerfen") }
             },

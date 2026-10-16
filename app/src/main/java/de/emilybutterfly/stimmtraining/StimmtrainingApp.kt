@@ -11,7 +11,6 @@ import de.emilybutterfly.stimmtraining.data.RecordingRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 
 class StimmtrainingApp : Application() {
     lateinit var container: AppContainer
@@ -20,7 +19,6 @@ class StimmtrainingApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        container.appScope.launch(Dispatchers.IO) { container.files.cleanOldDrafts() }
     }
 }
 

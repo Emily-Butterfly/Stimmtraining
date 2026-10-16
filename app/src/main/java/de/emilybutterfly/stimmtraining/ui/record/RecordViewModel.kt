@@ -69,7 +69,6 @@ class RecordViewModel(
     private var accumulatedMs = 0L
     private var segmentStartedAt = 0L
     private var ticker: Job? = null
-    private var saved = false
 
     init {
         // Entwurf sichern, damit er überlebt, wenn Android die App im Hintergrund beendet
@@ -269,6 +268,12 @@ class RecordViewModel(
         }
     }
 
+    /** Verwirft den ganzen Entwurf: Aufnahme und Foto. */
+    fun discardDraft() {
+        discardRecording()
+        removePhoto()
+    }
+
     fun save(onSaved: (Long) -> Unit) {
         val current = _state.value
         val audio = current.audio ?: return
@@ -285,7 +290,6 @@ class RecordViewModel(
                         params = current.params,
                     )
                 }
-                saved = true
                 onSaved(id)
             } catch (e: Exception) {
                 _state.update { it.copy(saving = false, message = "Speichern fehlgeschlagen: ${e.message}") }
@@ -307,14 +311,14 @@ class RecordViewModel(
         }
     }
 
+    /**
+     * Entwurfsdateien werden hier bewusst nicht gelöscht: Android kann die Activity zerstören
+     * und später samt gesichertem Zustand wiederherstellen. Gelöscht wird beim Verwerfen
+     * ([discardDraft]); liegen gebliebene Entwürfe räumt FileStore.cleanOldDrafts auf.
+     */
     override fun onCleared() {
         ticker?.cancel()
         if (recorder.isActive) recorder.stop()
-        if (!saved) {
-            recordingFile?.delete()
-            _state.value.audio?.delete()
-            _state.value.photo?.delete()
-        }
     }
 
     companion object {

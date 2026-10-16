@@ -214,10 +214,6 @@ class DetailViewModel(
         _message.value = null
     }
 
-    override fun onCleared() {
-        discardPhotoDraft()
-    }
-
     companion object {
         private const val KEY_EDITING = "editing"
         private const val KEY_PARAMS = "edit"

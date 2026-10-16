@@ -2,13 +2,19 @@ package de.emilybutterfly.stimmtraining.ui
 
 import android.os.Looper
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.core.app.ApplicationProvider
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.ui.record.RecordViewModel
 import de.emilybutterfly.stimmtraining.ui.record.RecorderPhase
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -43,6 +49,28 @@ class DraftRestoreTest {
         assertEquals(params, restored.params)
         assertEquals(1_791_000_000_000L, restored.recordedAt)
         assertEquals(42_000L, restored.durationMs)
+    }
+
+    @Test
+    fun draftsSurviveTheViewModelBeingClearedAndAreOnlyDeletedWhenDiscarded() {
+        val audio = app.container.files.newDraftFile("m4a").apply { writeBytes(ByteArray(100)) }
+        val photo = app.container.files.newDraftFile("jpg").apply { writeBytes(ByteArray(10)) }
+        val handle = SavedStateHandle()
+        handle[RecordViewModel.KEY_AUDIO] = audio.absolutePath
+        handle[RecordViewModel.KEY_PHOTO] = photo.absolutePath
+
+        // Android zerstört die Activity (ohne Konfigurationswechsel); der Zustand bleibt gesichert.
+        val store = ViewModelStore()
+        val factory = viewModelFactory { initializer { RecordViewModel(app, app.container, handle) } }
+        ViewModelProvider(store, factory)[RecordViewModel::class.java]
+        store.clear()
+        assertTrue(audio.isFile && photo.isFile)
+
+        val restored = RecordViewModel(app, app.container, handle)
+        assertEquals(RecorderPhase.Done, restored.state.value.phase)
+        restored.discardDraft()
+        assertFalse(audio.exists())
+        assertFalse(photo.exists())
     }
 
     @Test
