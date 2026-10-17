@@ -21,6 +21,7 @@ import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
 import de.emilybutterfly.stimmtraining.ui.importDraftDocument
 import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
+import de.emilybutterfly.stimmtraining.ui.importFailureMessage
 import de.emilybutterfly.stimmtraining.ui.openWithChooser
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
@@ -39,7 +40,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -172,11 +172,7 @@ class DetailViewModel(
                 }
             } catch (e: Exception) {
                 _edit.update { it?.copy(attachmentBusy = false) }
-                _message.value = when {
-                    isPhoto -> "Foto konnte nicht übernommen werden: ${e.message}"
-                    e is IOException && !e.message.isNullOrBlank() -> e.message
-                    else -> "Die Datei konnte nicht übernommen werden."
-                }
+                _message.value = importFailureMessage(isPhoto, e)
             }
         }
     }

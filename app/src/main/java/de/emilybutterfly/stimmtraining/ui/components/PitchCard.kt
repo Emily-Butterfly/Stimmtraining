@@ -71,8 +71,10 @@ fun PitchCard(result: PitchResult?, progress: Float?, onAnalyze: () -> Unit, mod
                         NoteTile("Häufigste", most, Modifier.weight(1f), highlight = true)
                         NoteTile("Höchste", highest, Modifier.weight(1f))
                     }
+                    // Internationale Notennamen: Wer deutsch liest, hält „B“ sonst für das deutsche B (= Ais).
+                    val hint = if (listOf(lowest, most, highest).any { Math.floorMod(it, 12) == 11 }) " B ist das deutsche H." else ""
                     Text(
-                        "Ausgewertet: ${formatSpokenTime(result.voicedMs)} Stimme. Kurze Ausreißer zählen nicht.",
+                        "Ausgewertet: ${formatSpokenTime(result.voicedMs)} Stimme. Kurze Ausreißer zählen nicht.$hint",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

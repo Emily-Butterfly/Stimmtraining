@@ -117,7 +117,8 @@ fun PitchHistoryScreen(
                 item(key = "intro") {
                     Text(
                         "Jeder Punkt ist die häufigste Note einer analysierten Aufnahme; der Strich reicht von " +
-                            "ihrer tiefsten bis zu ihrer höchsten Note.",
+                            "ihrer tiefsten bis zu ihrer höchsten Note. Notennamen wie in Stimmgeräte-Apps: " +
+                            "C4 ist das mittlere C, B das deutsche H.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }

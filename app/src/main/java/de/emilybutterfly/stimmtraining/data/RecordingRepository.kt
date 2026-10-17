@@ -100,8 +100,9 @@ class RecordingRepository(
             }
             if (replacement != null && stored.target != null) FileStore.move(replacement.file, stored.target)
             try {
-                dao.update(
-                    current.copy(
+                dao.updateEdit(
+                    RecordingEdit(
+                        id = current.id,
                         photoFile = stored.photoFile,
                         documentFile = stored.documentFile,
                         documentName = stored.documentName,

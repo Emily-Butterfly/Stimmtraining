@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -121,6 +122,10 @@ fun RecordScreen(
     var readingMode by rememberSaveable { mutableStateOf(false) }
     val reading = readingMode && state.attachment != null
     val reader = rememberReaderSettings()
+    // Inline-Karte und Lesemodus sind nie gleichzeitig zu sehen und teilen sich die Leseposition;
+    // das Formular behält seine Scrollposition, während der Lesemodus offen ist.
+    val documentListState = rememberSaveable(state.attachment?.file, saver = LazyListState.Saver) { LazyListState() }
+    val formScroll = rememberScrollState()
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.startRecording() else permissionDenied = true
@@ -166,8 +171,12 @@ fun RecordScreen(
             TopAppBar(
                 title = { Text(if (reading) "Lesen" else "Neue Aufnahme") },
                 navigationIcon = {
-                    IconButton(onClick = requestClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    // Im Lesemodus führt „Zurück“ wie die Zurück-Geste erst zum Formular.
+                    IconButton(onClick = { if (reading) readingMode = false else requestClose() }) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (reading) "Lesemodus beenden" else "Zurück",
+                        )
                     }
                 },
                 actions = {
@@ -201,7 +210,12 @@ fun RecordScreen(
         val attachment = state.attachment
         if (reading && attachment != null) {
             // Der Text füllt den Platz zwischen Titelleiste und Aufnahme-Knöpfen.
-            AttachmentReader(attachment, reader, Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding))
+            AttachmentReader(
+                attachment,
+                reader,
+                Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
+                documentListState = documentListState,
+            )
             return@Scaffold
         }
         Column(
@@ -210,7 +224,7 @@ fun RecordScreen(
                 .padding(padding)
                 .consumeWindowInsets(padding)
                 .imePadding()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(formScroll)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -229,6 +243,7 @@ fun RecordScreen(
                 onTextPasted = viewModel::onTextPasted,
                 onRemove = viewModel::removeAttachment,
                 onExpand = { readingMode = true },
+                documentListState = documentListState,
                 onOpenExternally = { document -> viewModel.openExternally(document) { context.startActivity(it) } },
                 // Kamera, Galerie oder Dateiauswahl würden die App in den Hintergrund schicken und die Aufnahme beenden.
                 enabled = !state.isRecording,

@@ -43,6 +43,9 @@ interface RecordingDao {
     @Update
     suspend fun update(recording: Recording)
 
+    @Update(entity = Recording::class)
+    suspend fun updateEdit(edit: RecordingEdit)
+
     @Delete
     suspend fun delete(recording: Recording)
 }

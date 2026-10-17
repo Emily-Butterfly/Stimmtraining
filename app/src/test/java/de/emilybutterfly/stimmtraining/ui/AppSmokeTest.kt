@@ -88,6 +88,10 @@ class AppSmokeTest {
         text("Einfügen").performScrollTo().performClick()
         text("Aus Zwischenablage einfügen").assertExists()
         compose.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextInput("Der Nordwind und die Sonne\nEinst stritten sich die beiden.")
+        // Schließen fragt erst nach, damit der Text nicht versehentlich verloren geht.
+        compose.onNodeWithContentDescription("Abbrechen").performClick()
+        text("Text verwerfen?").assertExists()
+        text("Weiter bearbeiten").performClick()
         text("Übernehmen").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Einst stritten sich die beiden.", substring = true) }
         text("Bearbeiten").performScrollTo().assertExists()

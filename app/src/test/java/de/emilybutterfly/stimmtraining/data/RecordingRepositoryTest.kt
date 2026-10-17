@@ -144,6 +144,33 @@ class RecordingRepositoryTest {
     }
 
     @Test
+    fun savingAnEditNeverOverwritesAPitchResultSavedInBetween() = runBlocking {
+        val id = repository.create(files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1)) }, null, 1L, 1L, RecordingParams())
+        val snapshot = db.recordingDao().get(id)!! // vor der Analyse gelesen
+        repository.savePitch(id, PitchResult(57, 52, 62, 8_000)) // Analyse wird fertig
+        db.recordingDao().updateEdit(
+            RecordingEdit(
+                id = id,
+                photoFile = snapshot.photoFile,
+                documentFile = snapshot.documentFile,
+                documentName = snapshot.documentName,
+                title = "bearbeitet",
+                exercise = snapshot.exercise,
+                warmedUp = snapshot.warmedUp,
+                warmUpMinutes = snapshot.warmUpMinutes,
+                voiceCondition = snapshot.voiceCondition,
+                selfRating = snapshot.selfRating,
+                notes = snapshot.notes,
+                updatedAt = 2L,
+            ),
+        )
+        val after = db.recordingDao().get(id)!!
+        assertEquals("bearbeitet", after.title)
+        assertEquals(57, after.pitchMostFrequent)
+        assertEquals(8_000L, after.pitchVoicedMs)
+    }
+
+    @Test
     fun missingPhotoDraftDoesNotCostTheRecording() = runBlocking {
         val audio = files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         val vanishedPhoto = files.newDraftFile("jpg")

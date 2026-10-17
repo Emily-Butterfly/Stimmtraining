@@ -1,6 +1,8 @@
 package de.emilybutterfly.stimmtraining.data
 
+import de.emilybutterfly.stimmtraining.data.document.DocumentReadException
 import java.io.File
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
@@ -21,9 +23,17 @@ object PastedText {
         return if (firstLine.length <= 40) firstLine else firstLine.take(39).trimEnd() + "…"
     }
 
-    /** Speichert den Text als UTF-8-Entwurf. */
-    fun createDraft(files: FileStore, text: String): File =
-        files.newDraftFile("txt").apply { writeText(text.take(MAX_CHARS)) }
+    /** Speichert den Text als UTF-8-Entwurf; scheitert das, bleibt keine halbe Datei zurück. */
+    fun createDraft(files: FileStore, text: String): File {
+        val file = files.newDraftFile("txt")
+        try {
+            file.writeText(text.take(MAX_CHARS))
+        } catch (e: IOException) {
+            file.delete()
+            throw DocumentReadException("Der Text konnte nicht gespeichert werden – ist der Speicher voll?", e)
+        }
+        return file
+    }
 
     /**
      * Der Inhalt einer Textdatei zum Bearbeiten, oder null, wenn sie zu lang ist oder nicht in

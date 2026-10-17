@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
@@ -52,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,6 +115,7 @@ fun TextAttachmentSection(
     onOpenExternally: (TextAttachment.Document) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    documentListState: LazyListState? = null,
 ) {
     val context = LocalContext.current
     val canChange = enabled && !busy
@@ -146,10 +150,13 @@ fun TextAttachmentSection(
     var editorOpen by rememberSaveable { mutableStateOf(false) }
     var editorValue by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     var editorName by rememberSaveable { mutableStateOf<String?>(null) }
+    // Nur ein Prüfwert des Ausgangstextes: Der Text selbst steckt schon in editorValue.
+    var editorInitialHash by rememberSaveable { mutableStateOf("".hashCode()) }
     val scope = rememberCoroutineScope()
     val pasteText = {
         editorValue = TextFieldValue()
         editorName = null
+        editorInitialHash = "".hashCode()
         editorOpen = true
     }
     val editText = { document: TextAttachment.Document ->
@@ -159,6 +166,7 @@ fun TextAttachmentSection(
                 Toast.makeText(context, "Diese Datei lässt sich hier nicht bearbeiten.", Toast.LENGTH_SHORT).show()
             } else {
                 editorValue = TextFieldValue(text, TextRange(text.length))
+                editorInitialHash = text.hashCode()
                 // Ein aus der ersten Zeile gebildeter Name passt sich dem neuen Text an.
                 editorName = document.name.takeIf { it != PastedText.name(text) }
                 editorOpen = true
@@ -206,6 +214,7 @@ fun TextAttachmentSection(
                 reader = reader,
                 onExpand = onExpand,
                 onOpenExternally = onOpenExternally.takeIf { enabled },
+                documentListState = documentListState,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 var menu by remember { mutableStateOf(false) }
@@ -265,6 +274,7 @@ fun TextAttachmentSection(
         TextEditorDialog(
             value = editorValue,
             onValueChange = { editorValue = it },
+            changed = editorValue.text.isNotBlank() && editorValue.text.hashCode() != editorInitialHash,
             onConfirm = {
                 onTextPasted(editorValue.text, editorName)
                 editorOpen = false
@@ -288,6 +298,8 @@ private fun ButtonLabel(icon: ImageVector, text: String) {
 /**
  * Vorschau des Textes: das Foto oder die Datei, mit Knopf zum Vergrößern. Ist
  * [onOpenExternally] gesetzt, lässt sich eine Datei auch in einer anderen App öffnen.
+ * Mit [documentListState] behält eine Datei ihre Leseposition, z. B. beim Wechsel in den
+ * Lesemodus; der Zustand darf nur von einer gleichzeitig sichtbaren Ansicht genutzt werden.
  */
 @Composable
 fun AttachmentPreview(
@@ -296,6 +308,7 @@ fun AttachmentPreview(
     onExpand: () -> Unit,
     onOpenExternally: ((TextAttachment.Document) -> Unit)?,
     modifier: Modifier = Modifier,
+    documentListState: LazyListState? = null,
 ) {
     when (attachment) {
         is TextAttachment.Photo -> Box(modifier) {
@@ -317,7 +330,7 @@ fun AttachmentPreview(
                 Icon(Icons.Filled.ZoomIn, contentDescription = null, modifier = Modifier.padding(6.dp).size(20.dp))
             }
         }
-        is TextAttachment.Document -> DocumentCard(attachment, reader, onExpand, onOpenExternally, modifier)
+        is TextAttachment.Document -> DocumentCard(attachment, reader, onExpand, onOpenExternally, modifier, documentListState)
     }
 }
 
@@ -328,6 +341,7 @@ private fun DocumentCard(
     onExpand: () -> Unit,
     onOpenExternally: ((TextAttachment.Document) -> Unit)?,
     modifier: Modifier = Modifier,
+    listState: LazyListState? = null,
 ) {
     val kind = document.kind
     OutlinedCard(modifier.fillMaxWidth()) {
@@ -344,8 +358,11 @@ private fun DocumentCard(
             }
         }
         HorizontalDivider()
-        val content by rememberDocumentContent(document)
-        DocumentView(content, reader, Modifier.heightIn(max = 420.dp))
+        // Eine neue Datei beginnt mit „lädt …“ und oben, nicht mit Inhalt und Position der alten.
+        key(document.file) {
+            val content by rememberDocumentContent(document)
+            DocumentView(content, reader, Modifier.heightIn(max = 420.dp), listState = listState ?: rememberLazyListState())
+        }
         if (onOpenExternally != null) {
             HorizontalDivider()
             TextButton(onClick = { onOpenExternally(document) }, modifier = Modifier.padding(horizontal = 4.dp)) {
@@ -360,12 +377,17 @@ fun documentIcon(kind: DocumentKind): ImageVector =
 
 /** Der Text so groß wie der verfügbare Platz, z. B. im Lesemodus beim Aufnehmen. */
 @Composable
-fun AttachmentReader(attachment: TextAttachment, reader: ReaderSettings, modifier: Modifier = Modifier) {
+fun AttachmentReader(
+    attachment: TextAttachment,
+    reader: ReaderSettings,
+    modifier: Modifier = Modifier,
+    documentListState: LazyListState? = null,
+) {
     when (attachment) {
         is TextAttachment.Photo -> ZoomableImage(attachment.file, modifier.clipToBounds())
-        is TextAttachment.Document -> {
+        is TextAttachment.Document -> key(attachment.file) {
             val content by rememberDocumentContent(attachment)
-            DocumentView(content, reader, modifier)
+            DocumentView(content, reader, modifier, listState = documentListState ?: rememberLazyListState())
         }
     }
 }

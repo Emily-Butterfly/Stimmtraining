@@ -71,3 +71,22 @@ data class RecordingParams(
     val warmUpMinutesOrNull: Int?
         get() = if (warmedUp) warmUpMinutes.trim().toIntOrNull()?.takeIf { it in 0..600 } else null
 }
+
+/**
+ * Was sich in der Detailansicht bearbeiten lässt. Als Teil-Update geschrieben, damit ein
+ * gleichzeitig gespeichertes Ergebnis der Tonhöhen-Analyse nicht überschrieben wird.
+ */
+data class RecordingEdit(
+    val id: Long,
+    val photoFile: String?,
+    val documentFile: String?,
+    val documentName: String?,
+    val title: String,
+    val exercise: String,
+    val warmedUp: Boolean,
+    val warmUpMinutes: Int?,
+    val voiceCondition: Int?,
+    val selfRating: Int?,
+    val notes: String,
+    val updatedAt: Long,
+)

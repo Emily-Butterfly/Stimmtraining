@@ -24,7 +24,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.TextDecrease
@@ -76,6 +78,7 @@ import de.emilybutterfly.stimmtraining.data.document.TextBlock
 import de.emilybutterfly.stimmtraining.data.document.TextDocument
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -91,6 +94,13 @@ sealed interface DocumentContent {
     data class Pdf(val pages: PdfPages) : DocumentContent
     data class Failed(val message: String) : DocumentContent
 }
+
+/**
+ * Alle PDF-Zugriffe nacheinander auf einem Thread: [PdfRenderer][android.graphics.pdf.PdfRenderer]
+ * kann ohnehin nur eine Seite gleichzeitig. Aufträge für inzwischen weggescrollte Seiten werden
+ * so verworfen, statt sich vor der gerade sichtbaren Seite zu stauen.
+ */
+private val PdfDispatcher = Dispatchers.IO.limitedParallelism(1)
 
 /** Lädt das Dokument im Hintergrund; ein geöffnetes PDF wird wieder geschlossen, wenn es nicht mehr angezeigt wird. */
 @Composable
@@ -112,7 +122,8 @@ fun rememberDocumentContent(document: TextAttachment.Document): State<DocumentCo
         } catch (_: Exception) {
             value = DocumentContent.Failed("Die Datei konnte nicht gelesen werden.")
         } finally {
-            pages?.close()
+            // Nicht auf dem Hauptthread: Schließen wartet, bis eine laufende Seite fertig ist.
+            pages?.let { opened -> withContext(NonCancellable + PdfDispatcher) { opened.close() } }
         }
     }
 
@@ -201,6 +212,7 @@ fun DocumentView(
     settings: ReaderSettings,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(16.dp),
+    listState: LazyListState = rememberLazyListState(),
 ) {
     when (content) {
         DocumentContent.Loading -> Box(modifier.fillMaxWidth().heightIn(min = 120.dp), contentAlignment = Alignment.Center) {
@@ -209,8 +221,8 @@ fun DocumentView(
         is DocumentContent.Failed -> Box(modifier.fillMaxWidth().padding(contentPadding)) {
             Text(content.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
-        is DocumentContent.Text -> TextDocumentView(content.document, settings, modifier, contentPadding)
-        is DocumentContent.Pdf -> PdfView(content.pages, settings, modifier, contentPadding)
+        is DocumentContent.Text -> TextDocumentView(content.document, settings, modifier, contentPadding, listState)
+        is DocumentContent.Pdf -> PdfView(content.pages, settings, modifier, contentPadding, listState)
     }
 }
 
@@ -220,6 +232,7 @@ private fun TextDocumentView(
     settings: ReaderSettings,
     modifier: Modifier,
     contentPadding: PaddingValues,
+    listState: LazyListState,
 ) {
     if (document.isBlank()) {
         Box(modifier.fillMaxWidth().padding(contentPadding)) {
@@ -233,6 +246,7 @@ private fun TextDocumentView(
     }
     val size = settings.textSize
     LazyColumn(
+        state = listState,
         modifier = modifier.fillMaxWidth().pinchToZoom(settings::zoomText),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy((size * 0.7f).dp),
@@ -290,7 +304,13 @@ private fun TextBlock.annotated(): AnnotatedString = buildAnnotatedString {
 }
 
 @Composable
-private fun PdfView(pages: PdfPages, settings: ReaderSettings, modifier: Modifier, contentPadding: PaddingValues) {
+private fun PdfView(
+    pages: PdfPages,
+    settings: ReaderSettings,
+    modifier: Modifier,
+    contentPadding: PaddingValues,
+    listState: LazyListState,
+) {
     BoxWithConstraints(
         modifier
             .fillMaxWidth()
@@ -305,6 +325,7 @@ private fun PdfView(pages: PdfPages, settings: ReaderSettings, modifier: Modifie
         val step = (viewportPx / 2).coerceAtLeast(64)
         val renderPx = (ceil(viewportPx * zoom / step).toInt() * step).coerceAtLeast(step)
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .horizontalScroll(rememberScrollState(), enabled = zoom > 1f)
                 .width(width),
@@ -327,9 +348,11 @@ private fun PdfView(pages: PdfPages, settings: ReaderSettings, modifier: Modifie
 @Composable
 private fun PdfPage(pages: PdfPages, index: Int, renderPx: Int, modifier: Modifier) {
     var bitmap by remember(pages, index) { mutableStateOf<ImageBitmap?>(null) }
+    // Zoomstufen, die dasselbe Bild ergeben, lösen kein neues Rendern aus.
+    val renderWidth = pages.renderSize(index, renderPx).width
     // Das bisherige Bild bleibt stehen, bis das schärfere fertig ist.
-    LaunchedEffect(pages, index, renderPx) {
-        val rendered = withContext(Dispatchers.IO) { runCatching { pages.render(index, renderPx) }.getOrNull() }
+    LaunchedEffect(pages, index, renderWidth) {
+        val rendered = withContext(PdfDispatcher) { runCatching { pages.render(index, renderWidth) }.getOrNull() }
         if (rendered != null) bitmap = rendered.asImageBitmap()
     }
     Box(modifier.background(Color.White)) {

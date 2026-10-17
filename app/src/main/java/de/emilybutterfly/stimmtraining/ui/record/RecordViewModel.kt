@@ -24,6 +24,7 @@ import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
 import de.emilybutterfly.stimmtraining.ui.importDraftDocument
 import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
+import de.emilybutterfly.stimmtraining.ui.importFailureMessage
 import de.emilybutterfly.stimmtraining.ui.openWithChooser
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
@@ -42,7 +43,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
 import kotlin.math.max
 
 enum class RecorderPhase { Idle, Recording, Paused, Done }
@@ -115,6 +115,7 @@ class RecordViewModel(
     private var segmentStartedAt = 0L
     private var ticker: Job? = null
     private var pitchJob: Job? = null
+    private var importJob: Job? = null
 
     init {
         // Entwurf sichern, damit er überlebt, wenn Android die App im Hintergrund beendet
@@ -242,15 +243,17 @@ class RecordViewModel(
     }
 
     private fun importAttachment(isPhoto: Boolean, load: suspend () -> TextAttachment) {
-        viewModelScope.launch {
+        importJob = viewModelScope.launch {
             _state.update { it.copy(attachmentBusy = true) }
             try {
                 val attachment = load()
                 val previous = _state.value.attachment
                 _state.update { it.copy(attachment = attachment, attachmentBusy = false) }
                 previous?.file?.delete()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _state.update { it.copy(attachmentBusy = false, message = importFailure(isPhoto, e)) }
+                _state.update { it.copy(attachmentBusy = false, message = importFailureMessage(isPhoto, e)) }
             }
         }
     }
@@ -456,6 +459,9 @@ class RecordViewModel(
 
     /** Verwirft den ganzen Entwurf: Aufnahme und Text. */
     fun discardDraft() {
+        // Ein noch laufender Import räumt seinen Entwurf beim Abbrechen selbst weg.
+        importJob?.cancel()
+        _state.update { it.copy(attachmentBusy = false) }
         discardRecording()
         removeAttachment()
     }
@@ -545,12 +551,6 @@ class RecordViewModel(
         /** Darunter endet eine laufende Aufnahme: Platz für den Abschluss der Datei und die Datenbank. */
         internal const val STOP_RECORDING_BYTES = FileStore.RESERVE_BYTES / 2
         private const val STORAGE_CHECK_MS = 1_000L
-
-        private fun importFailure(isPhoto: Boolean, e: Exception): String = when {
-            isPhoto -> "Foto konnte nicht übernommen werden: ${e.message}"
-            e is IOException && !e.message.isNullOrBlank() -> e.message!!
-            else -> "Die Datei konnte nicht übernommen werden."
-        }
 
         val Factory = viewModelFactory {
             initializer {

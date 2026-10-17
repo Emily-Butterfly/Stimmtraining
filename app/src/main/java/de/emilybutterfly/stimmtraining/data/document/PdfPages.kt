@@ -30,25 +30,35 @@ class PdfPages private constructor(
 
     val pageCount: Int get() = pageSizes.size
 
+    /**
+     * Die Bildgröße, in der Seite [index] für [widthPx] tatsächlich gerendert wird. Große
+     * Zoomstufen ergeben wegen der Obergrenzen oft dieselbe Größe – dann muss nicht neu
+     * gerendert werden.
+     */
+    fun renderSize(index: Int, widthPx: Int): Size {
+        val page = pageSizes[index]
+        var width = widthPx.coerceIn(1, MAX_WIDTH_PX).toDouble()
+        var height = width * page.height / page.width
+        // Sehr lange Seiten (z. B. Kassenzettel-Format) nicht beliebig groß werden lassen.
+        val pixels = width * height
+        if (pixels > MAX_PIXELS) {
+            val scale = sqrt(MAX_PIXELS / pixels)
+            width *= scale
+            height *= scale
+        }
+        return Size(width.toInt().coerceAtLeast(1), height.toInt().coerceAtLeast(1))
+    }
+
     /** Rendert Seite [index] in etwa [widthPx] Pixel Breite, oder null, wenn schon geschlossen. */
     fun render(index: Int, widthPx: Int): Bitmap? {
-        val key = "$index@$widthPx"
+        val size = renderSize(index, widthPx)
+        val key = "$index@${size.width}"
         cache.get(key)?.let { return it }
         synchronized(lock) {
             if (closed) return null
             cache.get(key)?.let { return it }
-            val page = pageSizes[index]
-            var width = widthPx.coerceIn(1, MAX_WIDTH_PX).toDouble()
-            var height = width * page.height / page.width
-            // Sehr lange Seiten (z. B. Kassenzettel-Format) nicht beliebig groß werden lassen.
-            val pixels = width * height
-            if (pixels > MAX_PIXELS) {
-                val scale = sqrt(MAX_PIXELS / pixels)
-                width *= scale
-                height *= scale
-            }
             val bitmap = try {
-                Bitmap.createBitmap(width.toInt().coerceAtLeast(1), height.toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+                Bitmap.createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
             } catch (_: OutOfMemoryError) {
                 cache.evictAll()
                 return null

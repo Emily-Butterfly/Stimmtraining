@@ -28,6 +28,9 @@ internal object AudioDecoder {
     /** Ohne jeden Fortschritt so lange gilt der Decoder als hängen geblieben. */
     private const val STALL_TIMEOUT_MS = 10_000L
 
+    /** Ein Durchlauf wartet höchstens ~10 ms; eine Sekunde Lücke kann nur ein Einfrieren sein. */
+    private const val FROZEN_GAP_NS = 1_000_000_000L
+
     // Erst ab API 31 als Konstanten in AudioFormat vorhanden
     private const val ENCODING_PCM_24BIT_PACKED = 21
     private const val ENCODING_PCM_32BIT = 22
@@ -109,6 +112,7 @@ internal object AudioDecoder {
         var decodedUs = 0.0
         var reported = 0f
         var lastActivity = System.nanoTime()
+        var lastLoop = lastActivity
         onProgress(0f)
 
         while (!outputDone) {
@@ -175,6 +179,10 @@ internal object AudioDecoder {
                 }
             }
             val now = System.nanoTime()
+            // Eine lange Pause zwischen zwei Durchläufen heißt: Android hat die App im
+            // Hintergrund eingefroren – das ist kein hängender Decoder, also neu zählen.
+            if (now - lastLoop > FROZEN_GAP_NS) lastActivity = now
+            lastLoop = now
             if (active) {
                 lastActivity = now
             } else if ((now - lastActivity) / 1_000_000 > STALL_TIMEOUT_MS) {

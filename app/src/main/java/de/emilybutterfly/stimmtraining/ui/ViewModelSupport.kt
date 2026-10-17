@@ -13,12 +13,15 @@ import de.emilybutterfly.stimmtraining.data.PastedText
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.data.document.DocumentImporter
+import de.emilybutterfly.stimmtraining.data.document.DocumentReadException
+import de.emilybutterfly.stimmtraining.data.document.UnsupportedDocumentException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileNotFoundException
 
 fun CreationExtras.app(): StimmtrainingApp =
     checkNotNull(this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY]) as StimmtrainingApp
@@ -99,6 +102,20 @@ suspend fun FileStore.importDraftDocument(context: Context, source: Uri): TextAt
 /** Übernimmt eingefügten Text als Entwurf; ohne [name] heißt er wie seine erste Zeile. */
 suspend fun FileStore.createDraftText(text: String, name: String?): TextAttachment.Document = createDraft({ it.file }) {
     TextAttachment.Document(PastedText.createDraft(this, text), name ?: PastedText.name(text))
+}
+
+/**
+ * Meldung, wenn ein Text-Anhang nicht übernommen werden konnte. Eigene Meldungen der App sind
+ * deutsch und verständlich; technische Systemmeldungen (oft englisch) werden nicht gezeigt.
+ */
+fun importFailureMessage(isPhoto: Boolean, e: Throwable): String {
+    val own = generateSequence(e) { it.cause }.firstOrNull { it is UnsupportedDocumentException || it is DocumentReadException }
+    return when {
+        own?.message != null -> own.message!!
+        e is FileNotFoundException -> "Die Datei konnte nicht geöffnet werden."
+        isPhoto -> "Das Foto konnte nicht übernommen werden."
+        else -> "Die Datei konnte nicht übernommen werden."
+    }
 }
 
 /** Ein „Öffnen mit …“-Dialog für ein Dokument. */
