@@ -102,7 +102,7 @@ class AppSmokeTest {
             container.repository.savePitch(id, PitchResult(mostFrequent = 57, lowest = 52, highest = 62, voicedMs = 12_000))
         }
         compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Tonleiter") }
-        text("A3").assertExists() // häufigste Note in der Liste
+        text("E3 · A3 · D4").assertExists() // tiefste · häufigste · höchste Note in der Liste
         text("Tonleiter").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Häufigste") }
         text("E3").assertExists()

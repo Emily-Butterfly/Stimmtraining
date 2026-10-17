@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -44,6 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -54,13 +57,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
-import de.emilybutterfly.stimmtraining.analysis.Notes
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.app
 import de.emilybutterfly.stimmtraining.ui.components.RatingDisplay
 import de.emilybutterfly.stimmtraining.ui.components.documentIcon
+import de.emilybutterfly.stimmtraining.ui.components.noteRange
+import de.emilybutterfly.stimmtraining.ui.components.noteRangeDescription
 import de.emilybutterfly.stimmtraining.ui.components.formatDay
 import de.emilybutterfly.stimmtraining.ui.components.formatDuration
 import de.emilybutterfly.stimmtraining.ui.components.formatTime
@@ -90,6 +94,7 @@ fun RecordingListScreen(
     onOpenRecording: (Long) -> Unit,
     onOpenBackup: () -> Unit,
     onOpenTechniques: () -> Unit,
+    onOpenPitchHistory: () -> Unit,
     viewModel: RecordingListViewModel = viewModel(factory = RecordingListViewModel.Factory),
 ) {
     val recordings by viewModel.recordings.collectAsStateWithLifecycle()
@@ -99,6 +104,9 @@ fun RecordingListScreen(
             TopAppBar(
                 title = { Text("Stimmtraining") },
                 actions = {
+                    IconButton(onClick = onOpenPitchHistory) {
+                        Icon(Icons.Outlined.Insights, contentDescription = "Tonhöhen-Verlauf")
+                    }
                     IconButton(onClick = onOpenTechniques) {
                         Icon(Icons.Outlined.School, contentDescription = "Techniken & Übungen")
                     }
@@ -227,7 +235,8 @@ private fun RecordingCard(recording: Recording, attachment: TextAttachment?, onC
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     WarmUpBadge(recording.warmedUp)
-                    recording.pitchMostFrequent?.let { NoteBadge(it) }
+                    val most = recording.pitchMostFrequent
+                    if (most != null) NoteBadge(recording.pitchLowest ?: most, most, recording.pitchHighest ?: most)
                     recording.selfRating?.let { RatingDisplay(it, iconSize = 14.dp) }
                 }
             }
@@ -256,21 +265,24 @@ private fun WarmUpBadge(warmedUp: Boolean) {
     }
 }
 
-/** Die häufigste Note der Aufnahme, wenn die Tonhöhe analysiert wurde. */
+/** Tiefste · häufigste · höchste Note, wenn die Tonhöhe analysiert wurde. */
 @Composable
-private fun NoteBadge(midi: Int) {
+private fun NoteBadge(lowest: Int, mostFrequent: Int, highest: Int) {
     Surface(
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.tertiaryContainer,
         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = noteRangeDescription(lowest, mostFrequent, highest)
+        },
     ) {
         Row(
             Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Icon(Icons.Filled.MusicNote, contentDescription = "Häufigste Note", modifier = Modifier.size(14.dp))
-            Text(Notes.name(midi), style = MaterialTheme.typography.labelSmall)
+            Icon(Icons.Filled.MusicNote, contentDescription = null, modifier = Modifier.size(14.dp))
+            Text(noteRange(lowest, mostFrequent, highest), style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
     }
 }

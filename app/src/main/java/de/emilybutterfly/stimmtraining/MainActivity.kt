@@ -16,6 +16,7 @@ import androidx.navigation.navArgument
 import de.emilybutterfly.stimmtraining.ui.backup.BackupScreen
 import de.emilybutterfly.stimmtraining.ui.detail.DetailScreen
 import de.emilybutterfly.stimmtraining.ui.list.RecordingListScreen
+import de.emilybutterfly.stimmtraining.ui.pitch.PitchHistoryScreen
 import de.emilybutterfly.stimmtraining.ui.record.RecordScreen
 import de.emilybutterfly.stimmtraining.ui.record.RecordViewModel
 import de.emilybutterfly.stimmtraining.ui.techniques.TechniqueDetailScreen
@@ -60,6 +61,13 @@ private fun AppNavigation() {
                 onOpenRecording = { id -> navController.fromCurrent(entry) { navigate("detail/$id") } },
                 onOpenBackup = { navController.fromCurrent(entry) { navigate("backup") } },
                 onOpenTechniques = { navController.fromCurrent(entry) { navigate("techniques") } },
+                onOpenPitchHistory = { navController.fromCurrent(entry) { navigate("pitch") } },
+            )
+        }
+        composable("pitch") { entry ->
+            PitchHistoryScreen(
+                onClose = { navController.fromCurrent(entry) { popBackStack() } },
+                onOpenRecording = { id -> navController.fromCurrent(entry) { navigate("detail/$id") } },
             )
         }
         composable(

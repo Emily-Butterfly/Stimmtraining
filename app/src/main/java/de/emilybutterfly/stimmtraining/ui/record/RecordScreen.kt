@@ -94,6 +94,7 @@ import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.components.AttachmentReader
 import de.emilybutterfly.stimmtraining.ui.components.AudioPlayerBar
 import de.emilybutterfly.stimmtraining.ui.components.ParameterForm
+import de.emilybutterfly.stimmtraining.ui.components.PitchCard
 import de.emilybutterfly.stimmtraining.ui.components.ReaderSizeButtons
 import de.emilybutterfly.stimmtraining.ui.components.TextAttachmentSection
 import de.emilybutterfly.stimmtraining.ui.components.formatBytes
@@ -213,6 +214,9 @@ fun RecordScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            if (state.phase == RecorderPhase.Done) {
+                PitchCard(result = state.pitch, progress = state.pitchProgress, onAnalyze = viewModel::analyzePitch)
+            }
             guide?.let { GuideCard(it) }
             TextAttachmentSection(
                 attachment = attachment,

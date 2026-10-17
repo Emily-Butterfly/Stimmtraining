@@ -11,6 +11,8 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import de.emilybutterfly.stimmtraining.AppContainer
+import de.emilybutterfly.stimmtraining.analysis.PitchAnalyzer
+import de.emilybutterfly.stimmtraining.analysis.PitchResult
 import de.emilybutterfly.stimmtraining.audio.AudioRecorder
 import de.emilybutterfly.stimmtraining.data.Exercise
 import de.emilybutterfly.stimmtraining.data.FileStore
@@ -25,6 +27,7 @@ import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
 import de.emilybutterfly.stimmtraining.ui.openWithChooser
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -71,6 +74,10 @@ data class RecordUiState(
     /** Ausgangswerte des Formulars, z. B. mit vorausgefüllter Übung. */
     val initialParams: RecordingParams = RecordingParams(),
     val storageWarning: StorageWarning? = null,
+    /** Tonhöhe der fertigen Aufnahme, falls schon vor dem Speichern analysiert. */
+    val pitch: PitchResult? = null,
+    /** Fortschritt (0..1) der laufenden Analyse, sonst null. */
+    val pitchProgress: Float? = null,
 ) {
     val isRecording: Boolean get() = phase == RecorderPhase.Recording || phase == RecorderPhase.Paused
 
@@ -107,6 +114,7 @@ class RecordViewModel(
     private var accumulatedMs = 0L
     private var segmentStartedAt = 0L
     private var ticker: Job? = null
+    private var pitchJob: Job? = null
 
     init {
         // Entwurf sichern, damit er überlebt, wenn Android die App im Hintergrund beendet
@@ -154,6 +162,7 @@ class RecordViewModel(
         val audio: String?,
         val recordedAt: Long?,
         val durationMs: Long,
+        val pitch: PitchResult?,
     )
 
     private fun persistable(state: RecordUiState): Persistable {
@@ -167,6 +176,7 @@ class RecordViewModel(
             audio = if (done) state.audio?.absolutePath else null,
             recordedAt = if (done) state.recordedAt else null,
             durationMs = if (done) state.durationMs else 0,
+            pitch = if (done) state.pitch else null,
         )
     }
 
@@ -179,6 +189,10 @@ class RecordViewModel(
         savedState[KEY_AUDIO] = p.audio
         savedState[KEY_RECORDED_AT] = p.recordedAt
         savedState[KEY_DURATION] = p.durationMs
+        savedState[KEY_PITCH_VOICED] = p.pitch?.voicedMs
+        savedState[KEY_PITCH_MOST] = p.pitch?.mostFrequent
+        savedState[KEY_PITCH_LOW] = p.pitch?.lowest
+        savedState[KEY_PITCH_HIGH] = p.pitch?.highest
     }
 
     private fun restore(): RecordUiState {
@@ -197,6 +211,9 @@ class RecordViewModel(
             recordedAt = savedState[KEY_RECORDED_AT],
             durationMs = duration,
             elapsedMs = duration,
+            pitch = savedState.get<Long>(KEY_PITCH_VOICED)?.let { voicedMs ->
+                PitchResult(savedState[KEY_PITCH_MOST], savedState[KEY_PITCH_LOW], savedState[KEY_PITCH_HIGH], voicedMs)
+            },
         )
     }
 
@@ -392,14 +409,48 @@ class RecordViewModel(
         }
     }
 
+    // --- Tonhöhe ---
+
+    /** Analysiert die fertige Aufnahme schon vor dem Speichern – nur auf dem Gerät. */
+    fun analyzePitch() {
+        val current = _state.value
+        val audio = current.audio ?: return
+        if (current.phase != RecorderPhase.Done || pitchJob?.isActive == true) return
+        _state.update { it.copy(pitchProgress = 0f) }
+        pitchJob = viewModelScope.launch {
+            try {
+                val result = PitchAnalyzer.analyzeFile(audio) { progress ->
+                    _state.update { if (it.audio == audio && it.pitchProgress != null) it.copy(pitchProgress = progress) else it }
+                }
+                _state.update { if (it.audio == audio) it.copy(pitch = result) else it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(message = "Die Tonhöhe ließ sich nicht analysieren: ${e.message}") }
+            } finally {
+                _state.update { it.copy(pitchProgress = null) }
+            }
+        }
+    }
+
     fun discardRecording() {
+        pitchJob?.cancel()
         ticker?.cancel()
         if (recorder.isActive) recorder.stop()
         recordingFile?.delete()
         recordingFile = null
         _state.value.audio?.delete()
         _state.update {
-            it.copy(phase = RecorderPhase.Idle, audio = null, elapsedMs = 0, durationMs = 0, recordedAt = null, level = 0f)
+            it.copy(
+                phase = RecorderPhase.Idle,
+                audio = null,
+                elapsedMs = 0,
+                durationMs = 0,
+                recordedAt = null,
+                level = 0f,
+                pitch = null,
+                pitchProgress = null,
+            )
         }
     }
 
@@ -416,6 +467,9 @@ class RecordViewModel(
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             try {
+                // Eine laufende Analyse dauert nur Sekunden; ihr Ergebnis wird mitgespeichert.
+                pitchJob?.join()
+                val pitch = _state.value.pitch?.takeIf { _state.value.audio == audio }
                 val id = withContext(NonCancellable) {
                     container.repository.create(
                         draftAudio = audio,
@@ -423,6 +477,7 @@ class RecordViewModel(
                         recordedAt = current.recordedAt ?: System.currentTimeMillis(),
                         durationMs = current.durationMs,
                         params = current.params,
+                        pitch = pitch,
                     )
                 }
                 onSaved(id)
@@ -479,6 +534,10 @@ class RecordViewModel(
         internal const val KEY_AUDIO = "audio"
         internal const val KEY_RECORDED_AT = "recordedAt"
         internal const val KEY_DURATION = "durationMs"
+        internal const val KEY_PITCH_VOICED = "pitchVoicedMs"
+        internal const val KEY_PITCH_MOST = "pitchMost"
+        internal const val KEY_PITCH_LOW = "pitchLow"
+        internal const val KEY_PITCH_HIGH = "pitchHigh"
 
         /** Darunter lohnt keine Aufnahme mehr: etwa eine Minute. */
         private const val MIN_RECORDING_BYTES = FileStore.AUDIO_BYTES_PER_MINUTE

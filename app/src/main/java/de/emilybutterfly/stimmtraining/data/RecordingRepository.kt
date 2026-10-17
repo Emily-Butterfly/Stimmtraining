@@ -43,6 +43,7 @@ class RecordingRepository(
         recordedAt: Long,
         durationMs: Long,
         params: RecordingParams,
+        pitch: PitchResult? = null,
     ): Long = withContext(Dispatchers.IO) {
         if (!draftAudio.isFile) throw IOException("Die Aufnahme-Datei ist nicht mehr vorhanden.")
         val uuid = UUID.randomUUID().toString()
@@ -71,6 +72,10 @@ class RecordingRepository(
                     voiceCondition = params.voiceCondition,
                     selfRating = params.selfRating,
                     notes = params.notes.trim(),
+                    pitchMostFrequent = pitch?.mostFrequent,
+                    pitchLowest = pitch?.lowest,
+                    pitchHighest = pitch?.highest,
+                    pitchVoicedMs = pitch?.voicedMs,
                     updatedAt = System.currentTimeMillis(),
                 ),
             )

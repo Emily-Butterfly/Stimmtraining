@@ -8,12 +8,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.test.core.app.ApplicationProvider
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
+import de.emilybutterfly.stimmtraining.analysis.PitchResult
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.record.RecordViewModel
 import de.emilybutterfly.stimmtraining.ui.record.RecorderPhase
 import de.emilybutterfly.stimmtraining.ui.record.StorageWarning
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -201,6 +203,51 @@ class DraftRestoreTest {
 
         val kept = createDraft({ it: File -> it }) { files.newDraftFile("txt").apply { writeText("y") } }
         assertTrue(kept.isFile)
+    }
+
+    @Test
+    fun pitchAnalysedBeforeSavingIsRestoredAndSaved() {
+        val audio = app.container.files.newDraftFile("m4a").apply { writeBytes(ByteArray(100)) }
+        val handle = SavedStateHandle()
+        handle[RecordViewModel.KEY_AUDIO] = audio.absolutePath
+        handle[RecordViewModel.KEY_DURATION] = 30_000L
+        handle[RecordViewModel.KEY_PITCH_VOICED] = 12_000L
+        handle[RecordViewModel.KEY_PITCH_MOST] = 57
+        handle[RecordViewModel.KEY_PITCH_LOW] = 52
+        handle[RecordViewModel.KEY_PITCH_HIGH] = 62
+
+        val viewModel = RecordViewModel(app, app.container, handle)
+        assertEquals(PitchResult(57, 52, 62, 12_000), viewModel.state.value.pitch)
+
+        var savedId: Long? = null
+        viewModel.save { savedId = it }
+        val deadline = System.currentTimeMillis() + 5_000
+        while (savedId == null && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(10)
+        }
+        val saved = runBlocking { app.container.repository.observe(savedId!!).first() }!!
+        assertEquals(57, saved.pitchMostFrequent)
+        assertEquals(52, saved.pitchLowest)
+        assertEquals(62, saved.pitchHighest)
+        assertEquals(12_000L, saved.pitchVoicedMs)
+    }
+
+    @Test
+    fun retakeForgetsThePitchOfTheOldTake() {
+        val audio = app.container.files.newDraftFile("m4a").apply { writeBytes(ByteArray(100)) }
+        val handle = SavedStateHandle()
+        handle[RecordViewModel.KEY_AUDIO] = audio.absolutePath
+        handle[RecordViewModel.KEY_PITCH_VOICED] = 12_000L
+        handle[RecordViewModel.KEY_PITCH_MOST] = 57
+        handle[RecordViewModel.KEY_PITCH_LOW] = 52
+        handle[RecordViewModel.KEY_PITCH_HIGH] = 62
+
+        val viewModel = RecordViewModel(app, app.container, handle)
+        viewModel.discardRecording()
+        assertNull(viewModel.state.value.pitch)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull("auch nicht im gesicherten Zustand", RecordViewModel(app, app.container, handle).state.value.pitch)
     }
 
     @Test
