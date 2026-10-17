@@ -21,11 +21,17 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
   - als **Datei**: PDF, Word (.docx), OpenDocument (.odt), RTF, HTML, Markdown (.md) oder
     Text (.txt), bis 50 MB. Das Format erkennt die App am Inhalt. Alte Word-Dateien (.doc)
     gehen nicht – in Word oder LibreOffice als .docx oder PDF speichern.
+  - **eingefügt** per Kopieren und Einfügen (oder getippt), bis 50.000 Zeichen. Eingefügte
+    Texte und Textdateien lassen sich später bearbeiten.
 
   Der Text wird beim Aufnehmen angezeigt. Schriftgröße bzw. PDF-Zoom lassen sich mit Knöpfen
   oder zwei Fingern einstellen; die Schriftgröße merkt sich die App. Der **Lesemodus** zeigt
   den Text auf dem ganzen Bildschirm, die Aufnahme-Knöpfe bleiben sichtbar. Dateien lassen
   sich außerdem in einer anderen App öffnen.
+- **Tonhöhen-Analyse**: ermittelt für eine Aufnahme die häufigste, die tiefste und die
+  höchste Note der Sprechstimme (z. B. A3 = 220 Hz; das mittlere C heißt C4). Kurze Ausreißer
+  zählen nicht. Die Analyse läuft vollständig auf dem Handy; das Ergebnis wird gespeichert, in
+  der Übersicht angezeigt und mitgesichert.
 - **Speicherplatz**: Sind weniger als 50 MB frei, weist die App vor dem Aufnehmen darauf hin
   (mit der ungefähren Aufnahmezeit, die noch passt). Wird der Speicher während einer Aufnahme
   knapp, endet sie rechtzeitig und bleibt abspielbar. Eine Minute Aufnahme braucht knapp 1 MB.
@@ -40,7 +46,9 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
     (`Stimmtraining-Auto-Backup-….zip`) bleiben erhalten; andere Dateien im Ordner, z. B.
     manuelle Sicherungen, werden nie gelöscht.
 
-Alle Daten bleiben auf dem Handy, es gibt keinen Server und kein Konto. Androids eigenes
+Alle Daten bleiben auf dem Handy, es gibt keinen Server und kein Konto. Die App hat **keine
+Internet-Berechtigung** – sie kann Aufnahmen gar nicht verschicken; ein Test stellt sicher,
+dass das so bleibt. Nur was du selbst teilst oder sicherst, verlässt das Gerät. Androids eigenes
 Cloud-Backup ist bewusst aus (Audiodateien sprengen dessen 25-MB-Grenze). Die Direktübertragung
 beim Gerätewechsel nimmt die Daten nur mit, wenn das alte Handy Android 12 oder neuer hat –
 **vor einem Handywechsel daher immer „Backup erstellen“ und auf dem neuen Handy wiederherstellen.**
@@ -102,6 +110,7 @@ vorher in der App ein Backup erstellen, danach wiederherstellen.
 app/src/main/java/de/emilybutterfly/stimmtraining/
   data/      Room-Datenbank, Dateiablage, Foto-Import
   data/document/  Dateien als Text: Formate erkennen, Text lesen, PDF-Seiten rendern
+  analysis/  Tonhöhen-Analyse: Audio dekodieren, Grundfrequenz bestimmen, Noten zählen
   audio/     Aufnahme (MediaRecorder)
   backup/    ZIP-Format, Export/Import, automatisches Backup
   ui/        Compose-Ansichten: Liste, Aufnahme, Detail, Backup
