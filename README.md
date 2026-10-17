@@ -29,9 +29,14 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
   den Text auf dem ganzen Bildschirm, die Aufnahme-Knöpfe bleiben sichtbar. Dateien lassen
   sich außerdem in einer anderen App öffnen.
 - **Tonhöhen-Analyse**: ermittelt für eine Aufnahme die häufigste, die tiefste und die
-  höchste Note der Sprechstimme (z. B. A3 = 220 Hz; das mittlere C heißt C4). Kurze Ausreißer
-  zählen nicht. Die Analyse läuft vollständig auf dem Handy; das Ergebnis wird gespeichert, in
-  der Übersicht angezeigt und mitgesichert.
+  höchste Note der Sprechstimme (z. B. A3 = 220 Hz; das mittlere C heißt C4, B ist das
+  deutsche H). Kurze Ausreißer zählen nicht. Per Knopf gleich nach der Aufnahme (vor dem
+  Speichern) oder später in der Detailansicht. Die Analyse läuft vollständig auf dem Handy;
+  das Ergebnis wird gespeichert, in der Übersicht als „E3 · **A3** · D4“ angezeigt und
+  mitgesichert.
+- **Tonhöhen-Verlauf**: Diagramm der häufigsten Note je Aufnahme über die Zeit, mit dem
+  Bereich von tiefster bis höchster Note, filterbar nach Zeitraum und Übung, dazu alle Werte
+  als Tabelle.
 - **Speicherplatz**: Sind weniger als 50 MB frei, weist die App vor dem Aufnehmen darauf hin
   (mit der ungefähren Aufnahmezeit, die noch passt). Wird der Speicher während einer Aufnahme
   knapp, endet sie rechtzeitig und bleibt abspielbar. Eine Minute Aufnahme braucht knapp 1 MB.
