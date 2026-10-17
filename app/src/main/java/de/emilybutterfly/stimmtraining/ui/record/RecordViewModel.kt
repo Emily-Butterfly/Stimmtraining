@@ -74,8 +74,9 @@ data class RecordUiState(
 ) {
     val isRecording: Boolean get() = phase == RecorderPhase.Recording || phase == RecorderPhase.Paused
 
+    /** Auch ein noch laufender Import zählt, damit „Zurück“ erst nachfragt. */
     val hasDraft: Boolean
-        get() = attachment != null || phase != RecorderPhase.Idle || params != initialParams
+        get() = attachment != null || attachmentBusy || phase != RecorderPhase.Idle || params != initialParams
 }
 
 /** Die Übung aus „Techniken & Übungen“, mit der diese Aufnahme gestartet wurde. */
@@ -247,7 +248,9 @@ class RecordViewModel(
         if (_state.value.isRecording) return
         viewModelScope.launch {
             try {
-                onReady(container.files.openWithChooser(document))
+                val chooser = container.files.openWithChooser(document)
+                // Inzwischen gestartet? Dann würde die andere App die Aufnahme beenden.
+                if (!_state.value.isRecording) onReady(chooser)
             } catch (e: Exception) {
                 _state.update { it.copy(message = "Die Datei lässt sich nicht öffnen: ${e.message}") }
             }
@@ -275,8 +278,7 @@ class RecordViewModel(
         _state.update { it.copy(storageWarning = null) }
         val file = container.files.newDraftFile("m4a")
         try {
-            // Bevor der Speicher vollläuft, endet die Aufnahme sauber und bleibt abspielbar.
-            recorder.start(file, maxBytes = budget.coerceAtMost(MAX_RECORDING_BYTES), onLimitReached = ::onStorageLimitReached)
+            recorder.start(file)
         } catch (e: Exception) {
             file.delete()
             _state.update { it.copy(message = "Aufnahme konnte nicht gestartet werden: ${e.message}") }
@@ -300,6 +302,7 @@ class RecordViewModel(
 
     fun dismissStorageWarning() = _state.update { it.copy(storageWarning = null) }
 
+    /** Bevor der Speicher vollläuft, endet die Aufnahme sauber und bleibt abspielbar. */
     private fun onStorageLimitReached() {
         if (!_state.value.isRecording) return
         stopRecording()
@@ -434,10 +437,20 @@ class RecordViewModel(
     private fun startTicker() {
         ticker?.cancel()
         ticker = viewModelScope.launch {
+            var lastStorageCheck = 0L
             while (isActive) {
-                val elapsed = accumulatedMs + (SystemClock.elapsedRealtime() - segmentStartedAt)
+                val now = SystemClock.elapsedRealtime()
+                val elapsed = accumulatedMs + (now - segmentStartedAt)
                 val level = recorder.level()
                 _state.update { it.copy(elapsedMs = elapsed, level = max(level, it.level * 0.8f)) }
+                // Auch andere Apps können den Speicher während der Aufnahme füllen.
+                if (now - lastStorageCheck >= STORAGE_CHECK_MS) {
+                    lastStorageCheck = now
+                    if (freeBytes() < STOP_RECORDING_BYTES) {
+                        onStorageLimitReached()
+                        return@launch
+                    }
+                }
                 delay(80)
             }
         }
@@ -470,8 +483,9 @@ class RecordViewModel(
         /** Darunter lohnt keine Aufnahme mehr: etwa eine Minute. */
         private const val MIN_RECORDING_BYTES = FileStore.AUDIO_BYTES_PER_MINUTE
 
-        /** MP4-Dateien sind auf manchen Geräten auf 4 GB begrenzt; 2 GB sind über 30 Stunden. */
-        private const val MAX_RECORDING_BYTES = 2L shl 30
+        /** Darunter endet eine laufende Aufnahme: Platz für den Abschluss der Datei und die Datenbank. */
+        internal const val STOP_RECORDING_BYTES = FileStore.RESERVE_BYTES / 2
+        private const val STORAGE_CHECK_MS = 1_000L
 
         private fun importFailure(isPhoto: Boolean, e: Exception): String = when {
             isPhoto -> "Foto konnte nicht übernommen werden: ${e.message}"

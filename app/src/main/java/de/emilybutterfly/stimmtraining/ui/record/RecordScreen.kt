@@ -89,6 +89,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.components.AttachmentReader
 import de.emilybutterfly.stimmtraining.ui.components.AudioPlayerBar
@@ -310,8 +311,10 @@ private fun StorageWarningDialog(
         text = {
             if (warning.full) {
                 Text(
-                    "Auf dem Handy sind nur noch $free frei – zu wenig für eine Aufnahme. " +
-                        "Gib Speicher frei, z. B. indem du Videos auslagerst oder Apps entfernst, die du nicht brauchst.",
+                    "Auf dem Handy sind nur noch $free frei. Damit Android und die App sicher weiterlaufen, " +
+                        "nimmt die App erst ab etwa ${formatBytes(FileStore.RESERVE_BYTES + FileStore.AUDIO_BYTES_PER_MINUTE)} " +
+                        "freiem Speicher auf. Gib Speicher frei, z. B. indem du Videos auslagerst oder Apps entfernst, " +
+                        "die du nicht brauchst.",
                 )
             } else {
                 val minutes = if (warning.minutesLeft == 1L) "1 Minute" else "${warning.minutesLeft} Minuten"

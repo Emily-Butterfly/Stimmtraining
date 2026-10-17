@@ -24,17 +24,20 @@ object DocumentImporter {
         files: FileStore,
         source: Uri,
         maxBytes: Long = MAX_BYTES,
+        isCancelled: () -> Boolean = { false },
     ): TextAttachment.Document {
         val (displayName, size) = queryNameAndSize(resolver, source)
         if (size != null && size > maxBytes) throw tooLarge(maxBytes)
         val space = files.freeBytes() - FileStore.RESERVE_BYTES
-        if (size != null && size > space) throw noSpace(files)
+        if (size != null && size > space) throw noSpace(space)
         val limit = minOf(maxBytes, space)
 
         val temp = files.newDraftFile("tmp")
         try {
             val input = resolver.openInputStream(source) ?: throw IOException("Die Datei konnte nicht geöffnet werden.")
-            input.use { copyLimited(it, temp, limit) { if (limit < maxBytes) noSpace(files) else tooLarge(maxBytes) } }
+            input.use {
+                copyLimited(it, temp, limit, isCancelled) { if (limit < maxBytes) noSpace(space) else tooLarge(maxBytes) }
+            }
 
             val kind = DocumentDetector.detect(temp, displayName, resolver.getType(source))
             // Schon hier lesen, damit eine beschädigte Datei gar nicht erst angehängt wird.
@@ -71,11 +74,18 @@ object DocumentImporter {
         }
     }
 
-    private fun copyLimited(input: java.io.InputStream, target: File, limit: Long, onExceeded: () -> IOException) {
+    private fun copyLimited(
+        input: java.io.InputStream,
+        target: File,
+        limit: Long,
+        isCancelled: () -> Boolean,
+        onExceeded: () -> IOException,
+    ) {
         target.outputStream().use { output ->
             val buffer = ByteArray(64 * 1024)
             var total = 0L
             while (true) {
+                if (isCancelled()) throw IOException("Abgebrochen.")
                 val read = input.read(buffer)
                 if (read < 0) break
                 total += read
@@ -88,6 +98,7 @@ object DocumentImporter {
     private fun tooLarge(maxBytes: Long) =
         IOException("Die Datei ist zu groß (höchstens ${formatBytes(maxBytes)}).")
 
-    private fun noSpace(files: FileStore) =
-        IOException("Nicht genug Speicherplatz für diese Datei (noch ${formatBytes(files.freeBytes())} frei).")
+    /** [space] ist, was nach der Reserve für Android und die App noch nutzbar ist. */
+    private fun noSpace(space: Long) =
+        IOException("Nicht genug Speicherplatz für diese Datei (nutzbar sind noch ${formatBytes(space.coerceAtLeast(0))}).")
 }

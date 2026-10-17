@@ -13,6 +13,9 @@ import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.record.RecordViewModel
 import de.emilybutterfly.stimmtraining.ui.record.RecorderPhase
 import de.emilybutterfly.stimmtraining.ui.record.StorageWarning
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -22,6 +25,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.io.File
+import java.time.Duration
 
 /** Ein nicht gespeicherter Entwurf übersteht es, wenn Android die App beendet. */
 @RunWith(RobolectricTestRunner::class)
@@ -160,6 +165,42 @@ class DraftRestoreTest {
 
         // Übersteht das Beenden der App wie jeder Entwurf.
         assertEquals(document, RecordViewModel(app, app.container, handle).state.value.attachment)
+    }
+
+    @Test
+    fun recordingEndsWhenStorageRunsLowWhileRecording() {
+        var free = 4L shl 30
+        val viewModel = RecordViewModel(app, app.container, SavedStateHandle(), freeBytes = { free })
+        viewModel.startRecording()
+        assertEquals(RecorderPhase.Recording, viewModel.state.value.phase)
+
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals("genug Platz: läuft weiter", RecorderPhase.Recording, viewModel.state.value.phase)
+
+        // Eine andere App füllt den Speicher.
+        free = RecordViewModel.STOP_RECORDING_BYTES - 1
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertFalse(viewModel.state.value.isRecording)
+    }
+
+    @Test
+    fun draftCreatedWhileTheCallerIsCancelledIsDeleted() = runBlocking {
+        val files = app.container.files
+        var draft: File? = null
+        lateinit var job: Job
+        job = launch {
+            createDraft({ it: File -> it }) {
+                files.newDraftFile("txt").apply { writeText("x") }.also {
+                    draft = it
+                    job.cancel() // z. B. Ansicht geschlossen, während die Datei kopiert wurde
+                }
+            }
+        }
+        job.join()
+        assertFalse("verwaister Entwurf gelöscht", draft!!.exists())
+
+        val kept = createDraft({ it: File -> it }) { files.newDraftFile("txt").apply { writeText("y") } }
+        assertTrue(kept.isFile)
     }
 
     @Test

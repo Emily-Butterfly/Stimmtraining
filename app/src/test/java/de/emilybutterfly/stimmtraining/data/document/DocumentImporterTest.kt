@@ -74,6 +74,24 @@ class DocumentImporterTest {
     }
 
     @Test
+    fun cancelledImportStopsAndLeavesNothingBehind() {
+        assertThrows(IOException::class.java) {
+            DocumentImporter.import(context.contentResolver, files, picked("Text.txt", ByteArray(100_000)), isCancelled = { true })
+        }
+        assertEquals(emptyList<File>(), drafts)
+    }
+
+    @Test
+    fun documentsOpenInOtherAppsUnderTheirOwnName() {
+        val document = import(picked("Nordwind und Sonne.md", "# Titel".toByteArray()))
+        val intent = files.viewIntent(document.file, document.name, document.kind.mimeType)
+        assertEquals(android.content.Intent.ACTION_VIEW, intent.action)
+        assertEquals("text/markdown", intent.type)
+        assertTrue(intent.data.toString(), intent.data.toString().endsWith("/open/Nordwind%20und%20Sonne.md"))
+        assertTrue(intent.flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+    }
+
+    @Test
     fun displayNamesGetAnExtensionAndLoseControlCharacters() {
         assertEquals("Text.txt", DocumentImporter.documentName(null, DocumentKind.PlainText))
         assertEquals("Gedicht.odt", DocumentImporter.documentName("Gedicht", DocumentKind.Odt))

@@ -13,7 +13,10 @@ import de.emilybutterfly.stimmtraining.data.PastedText
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.data.document.DocumentImporter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -47,8 +50,26 @@ fun FileStore.prepareCameraCapture(): Uri {
     return uriFor(cameraCaptureFile)
 }
 
+/**
+ * Legt einen Entwurf an und räumt ihn wieder weg, falls der Aufrufer inzwischen abgebrochen
+ * wurde (z. B. weil die Ansicht während eines langen Imports geschlossen wurde). Sonst bliebe
+ * die Datei liegen, ohne dass etwas auf sie verweist. [create] bekommt eine Abfrage, ob
+ * abgebrochen wurde, damit lange Kopien früh aufhören können.
+ */
+internal suspend fun <T> createDraft(file: (T) -> File, create: (isCancelled: () -> Boolean) -> T): T {
+    val job = currentCoroutineContext().job
+    var created: T? = null
+    try {
+        return withContext(Dispatchers.IO) { create { job.isCancelled }.also { created = it } }
+    } catch (e: CancellationException) {
+        // withContext verwirft das Ergebnis, wenn der Aufrufer inzwischen abgebrochen wurde.
+        created?.let { file(it).delete() }
+        throw e
+    }
+}
+
 /** Übernimmt ein Foto als neuen Entwurf (JPEG, gedreht und verkleinert). */
-suspend fun FileStore.importDraftPhoto(context: Context, source: Uri): File = withContext(Dispatchers.IO) {
+suspend fun FileStore.importDraftPhoto(context: Context, source: Uri): File = createDraft({ it }) {
     val target = newDraftFile("jpg")
     try {
         ImageImporter.import(context.contentResolver, source, target)
@@ -71,11 +92,13 @@ suspend fun FileStore.importCameraCapture(context: Context): File {
 
 /** Übernimmt eine Datei (PDF, Word, Text, …) als Entwurf. */
 suspend fun FileStore.importDraftDocument(context: Context, source: Uri): TextAttachment.Document =
-    withContext(Dispatchers.IO) { DocumentImporter.import(context.contentResolver, this@importDraftDocument, source) }
+    createDraft({ it.file }) { isCancelled ->
+        DocumentImporter.import(context.contentResolver, this, source, isCancelled = isCancelled)
+    }
 
 /** Übernimmt eingefügten Text als Entwurf; ohne [name] heißt er wie seine erste Zeile. */
-suspend fun FileStore.createDraftText(text: String, name: String?): TextAttachment.Document = withContext(Dispatchers.IO) {
-    TextAttachment.Document(PastedText.createDraft(this@createDraftText, text), name ?: PastedText.name(text))
+suspend fun FileStore.createDraftText(text: String, name: String?): TextAttachment.Document = createDraft({ it.file }) {
+    TextAttachment.Document(PastedText.createDraft(this, text), name ?: PastedText.name(text))
 }
 
 /** Ein „Öffnen mit …“-Dialog für ein Dokument. */

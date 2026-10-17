@@ -52,8 +52,16 @@ class FileStore(private val context: Context) {
             deleteRecursively()
             mkdirs()
         }
+        if (file.length() > dir.usableSpace - RESERVE_BYTES) {
+            throw IOException("Zu wenig Speicherplatz, um die Datei in einer anderen App zu öffnen.")
+        }
         val target = File(dir, safeFileName(displayName, file.extension))
-        file.copyTo(target, overwrite = true)
+        try {
+            file.copyTo(target, overwrite = true)
+        } catch (e: IOException) {
+            dir.deleteRecursively()
+            throw IOException("Die Datei ließ sich nicht für die andere App vorbereiten.", e)
+        }
         return Intent(Intent.ACTION_VIEW)
             .setDataAndType(uriFor(target), mimeType)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
