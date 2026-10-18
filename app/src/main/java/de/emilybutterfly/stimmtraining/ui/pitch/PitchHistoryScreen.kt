@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.emilybutterfly.stimmtraining.analysis.Notes
+import de.emilybutterfly.stimmtraining.ui.gentleMode
 import de.emilybutterfly.stimmtraining.ui.components.formatDateTime
 import de.emilybutterfly.stimmtraining.ui.components.noteRange
 import de.emilybutterfly.stimmtraining.ui.components.noteRangeDescription
@@ -101,6 +102,13 @@ fun PitchHistoryScreen(
     ) { padding ->
         val loaded = history
         when {
+            gentleMode() -> Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    "Die Tonhöhe ist ausgeblendet (sanfter Modus). Einblenden kannst du sie in den Einstellungen.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
+            }
             loaded == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }

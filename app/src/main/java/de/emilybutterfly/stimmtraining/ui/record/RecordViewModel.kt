@@ -131,7 +131,8 @@ class RecordViewModel(
         val techniqueId = savedState.get<String>(ARG_TECHNIQUE) ?: return
         val exerciseId = savedState.get<String>(ARG_EXERCISE)
         viewModelScope.launch {
-            val technique = withContext(Dispatchers.IO) { runCatching { container.techniques }.getOrNull() }
+            val gentle = container.settings.gentleMode.value
+            val technique = withContext(Dispatchers.IO) { runCatching { container.techniques(gentle) }.getOrNull() }
                 ?.technique(techniqueId)
             val exercise = exerciseId?.let { technique?.exercise(it) }
             if (technique == null || exercise == null) {

@@ -41,49 +41,63 @@ data class Exercise(
 
 data class Source(val title: String, val url: String)
 
+/**
+ * Liest die Inhalte. Mit [gentle] (sanfter Modus) gelten die Felder „…Gentle“, wo es sie gibt:
+ * Fassungen ohne Richtwerte, ohne Studien dazu, wie Stimmen nach Geschlecht eingeordnet werden,
+ * und ohne Messen mit Stimmgerät-Apps. Titel und IDs sind in beiden Fassungen gleich; die
+ * Quellenliste entfällt im sanften Modus.
+ */
 object TechniqueLibrary {
     const val ASSET = "techniques.json"
 
-    fun load(context: Context): TechniqueContent =
-        context.assets.open(ASSET).use { parse(it.readBytes().toString(Charsets.UTF_8)) }
+    fun load(context: Context, gentle: Boolean = false): TechniqueContent =
+        context.assets.open(ASSET).use { parse(it.readBytes().toString(Charsets.UTF_8), gentle) }
 
-    fun parse(json: String): TechniqueContent {
+    fun parse(json: String, gentle: Boolean = false): TechniqueContent {
         val root = JSONObject(json)
         return TechniqueContent(
-            techniques = root.getJSONArray("techniques").objects().map(::technique),
-            sources = root.optJSONArray("sources")?.objects()?.map { Source(it.getString("title"), it.getString("url")) }
-                .orEmpty(),
+            techniques = root.getJSONArray("techniques").objects().map { technique(it, gentle) },
+            sources = if (gentle) {
+                emptyList()
+            } else {
+                root.optJSONArray("sources")?.objects()?.map { Source(it.getString("title"), it.getString("url")) }.orEmpty()
+            },
         )
     }
 
-    private fun technique(o: JSONObject) = Technique(
+    private fun technique(o: JSONObject, gentle: Boolean) = Technique(
         id = o.getString("id"),
         title = o.getString("title"),
         subtitle = o.getString("subtitle"),
         focus = o.optBoolean("focus", false),
-        intro = o.getString("intro"),
-        why = o.getString("why"),
-        howToFind = o.strings("howToFind"),
-        examples = o.strings("examples"),
-        exercises = o.getJSONArray("exercises").objects().map(::exercise),
-        pitfalls = o.strings("pitfalls"),
-        safety = o.strings("safety"),
+        intro = o.text("intro", gentle),
+        why = o.text("why", gentle),
+        howToFind = o.strings("howToFind", gentle),
+        examples = o.strings("examples", gentle),
+        exercises = o.getJSONArray("exercises").objects().map { exercise(it, gentle) },
+        pitfalls = o.strings("pitfalls", gentle),
+        safety = o.strings("safety", gentle),
     )
 
-    private fun exercise(o: JSONObject) = Exercise(
+    private fun exercise(o: JSONObject, gentle: Boolean) = Exercise(
         id = o.getString("id"),
         title = o.getString("title"),
-        goal = o.getString("goal"),
+        goal = o.text("goal", gentle),
         duration = o.getString("duration"),
-        steps = o.strings("steps"),
-        examples = o.strings("examples"),
-        checks = o.strings("checks"),
+        steps = o.strings("steps", gentle),
+        examples = o.strings("examples", gentle),
+        checks = o.strings("checks", gentle),
     )
 
     private fun JSONArray.objects() = (0 until length()).map { getJSONObject(it) }
 
-    private fun JSONObject.strings(name: String): List<String> {
-        val array = optJSONArray(name) ?: return emptyList()
+    private fun JSONObject.text(name: String, gentle: Boolean): String =
+        if (gentle && has(name + GENTLE)) getString(name + GENTLE) else getString(name)
+
+    private fun JSONObject.strings(name: String, gentle: Boolean): List<String> {
+        val array = (if (gentle) optJSONArray(name + GENTLE) else null) ?: optJSONArray(name) ?: return emptyList()
         return (0 until array.length()).map { array.getString(it) }
     }
+
+    private const val GENTLE = "Gentle"
 }

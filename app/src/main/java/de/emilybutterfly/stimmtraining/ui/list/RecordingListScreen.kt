@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,6 +62,7 @@ import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.ui.app
+import de.emilybutterfly.stimmtraining.ui.gentleMode
 import de.emilybutterfly.stimmtraining.ui.components.RatingDisplay
 import de.emilybutterfly.stimmtraining.ui.components.documentIcon
 import de.emilybutterfly.stimmtraining.ui.components.noteRange
@@ -95,23 +97,30 @@ fun RecordingListScreen(
     onOpenBackup: () -> Unit,
     onOpenTechniques: () -> Unit,
     onOpenPitchHistory: () -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: RecordingListViewModel = viewModel(factory = RecordingListViewModel.Factory),
 ) {
     val recordings by viewModel.recordings.collectAsStateWithLifecycle()
+    val gentle = gentleMode()
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Stimmtraining") },
                 actions = {
-                    IconButton(onClick = onOpenPitchHistory) {
-                        Icon(Icons.Outlined.Insights, contentDescription = "Tonhöhen-Verlauf")
+                    if (!gentle) {
+                        IconButton(onClick = onOpenPitchHistory) {
+                            Icon(Icons.Outlined.Insights, contentDescription = "Tonhöhen-Verlauf")
+                        }
                     }
                     IconButton(onClick = onOpenTechniques) {
                         Icon(Icons.Outlined.School, contentDescription = "Techniken & Übungen")
                     }
                     IconButton(onClick = onOpenBackup) {
                         Icon(Icons.Outlined.Backup, contentDescription = "Backup")
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Outlined.Settings, contentDescription = "Einstellungen")
                     }
                 },
             )
@@ -236,7 +245,7 @@ private fun RecordingCard(recording: Recording, attachment: TextAttachment?, onC
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     WarmUpBadge(recording.warmedUp)
                     val most = recording.pitchMostFrequent
-                    if (most != null) NoteBadge(recording.pitchLowest ?: most, most, recording.pitchHighest ?: most)
+                    if (most != null && !gentleMode()) NoteBadge(recording.pitchLowest ?: most, most, recording.pitchHighest ?: most)
                     recording.selfRating?.let { RatingDisplay(it, iconSize = 14.dp) }
                 }
             }

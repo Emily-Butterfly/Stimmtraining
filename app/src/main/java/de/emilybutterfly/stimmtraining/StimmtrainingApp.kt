@@ -6,6 +6,7 @@ import de.emilybutterfly.stimmtraining.backup.AutoBackup
 import de.emilybutterfly.stimmtraining.backup.BackupManager
 import de.emilybutterfly.stimmtraining.backup.BackupSettings
 import de.emilybutterfly.stimmtraining.data.AppDatabase
+import de.emilybutterfly.stimmtraining.data.AppSettings
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
 import de.emilybutterfly.stimmtraining.data.TechniqueContent
@@ -35,6 +36,12 @@ class AppContainer(context: Context) {
     val backupSettings = BackupSettings(context)
     val autoBackup = AutoBackup(context, backupManager, database.recordingDao(), backupSettings)
 
+    val settings = AppSettings(context)
+
     /** Inhalte von „Techniken & Übungen“; beim ersten Zugriff aus den Assets gelesen. */
     val techniques: TechniqueContent by lazy { TechniqueLibrary.load(appContext) }
+    private val gentleTechniques: TechniqueContent by lazy { TechniqueLibrary.load(appContext, gentle = true) }
+
+    /** Die Inhalte in der Fassung für den sanften Modus oder die vollständige. */
+    fun techniques(gentle: Boolean): TechniqueContent = if (gentle) gentleTechniques else techniques
 }

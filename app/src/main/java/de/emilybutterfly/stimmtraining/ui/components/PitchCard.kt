@@ -1,5 +1,6 @@
 package de.emilybutterfly.stimmtraining.ui.components
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,9 +11,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -21,19 +24,26 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.emilybutterfly.stimmtraining.analysis.Notes
 import de.emilybutterfly.stimmtraining.analysis.PitchResult
+import de.emilybutterfly.stimmtraining.ui.LocalAppSettings
+import de.emilybutterfly.stimmtraining.ui.gentleMode
 import kotlin.math.roundToInt
 
 /**
  * Tiefste, häufigste und höchste Note einer Aufnahme – oder der Knopf, sie zu ermitteln.
  * [result] null: noch nicht analysiert. [progress] gesetzt: Analyse läuft.
+ * Im sanften Modus erscheint nichts; ein Knopf auf der Karte schaltet ihn sofort ein.
  */
 @Composable
 fun PitchCard(result: PitchResult?, progress: Float?, onAnalyze: () -> Unit, modifier: Modifier = Modifier) {
+    if (gentleMode()) return
+    val settings = LocalAppSettings.current
+    val context = LocalContext.current
     Card(modifier) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -42,6 +52,18 @@ fun PitchCard(result: PitchResult?, progress: Float?, onAnalyze: () -> Unit, mod
                 Text("Tonhöhe", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 if (result != null && progress == null) {
                     TextButton(onClick = onAnalyze) { Text("Neu analysieren") }
+                }
+                if (settings != null) {
+                    IconButton(onClick = {
+                        settings.setGentleMode(true)
+                        Toast.makeText(
+                            context,
+                            "Tonhöhe ausgeblendet. Wieder einblenden: Einstellungen → Sanfter Modus.",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }) {
+                        Icon(Icons.Outlined.VisibilityOff, contentDescription = "Tonhöhe ausblenden")
+                    }
                 }
             }
             val most = result?.mostFrequent

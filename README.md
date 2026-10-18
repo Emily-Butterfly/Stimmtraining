@@ -37,6 +37,12 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
 - **Tonhöhen-Verlauf**: Diagramm der häufigsten Note je Aufnahme über die Zeit, mit dem
   Bereich von tiefster bis höchster Note, filterbar nach Zeitraum und Übung, dazu alle Werte
   als Tabelle.
+- **Sanfter Modus** (Einstellungen, oder direkt auf der Tonhöhen-Karte ausblenden): für Tage,
+  an denen Zahlen und Vergleiche nicht guttun. Blendet die Tonhöhen-Analyse (Noten, Hz,
+  Verlauf) aus und zeigt „Techniken & Übungen“ in einer Fassung ohne Richtwerte, ohne Aussagen
+  darüber, wie Stimmen nach Geschlecht eingeordnet werden, ohne Messen mit Stimmgerät-Apps und
+  ohne Aufnahmen der schweren Vergleichsstimme. Ein Test stellt sicher, dass diese Fassung
+  keine solchen Begriffe enthält. Daten gehen dabei nicht verloren.
 - **Speicherplatz**: Sind weniger als 50 MB frei, weist die App vor dem Aufnehmen darauf hin
   (mit der ungefähren Aufnahmezeit, die noch passt). Wird der Speicher während einer Aufnahme
   knapp, endet sie rechtzeitig und bleibt abspielbar. Eine Minute Aufnahme braucht knapp 1 MB.

@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavType
@@ -13,12 +14,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import de.emilybutterfly.stimmtraining.ui.LocalAppSettings
 import de.emilybutterfly.stimmtraining.ui.backup.BackupScreen
 import de.emilybutterfly.stimmtraining.ui.detail.DetailScreen
 import de.emilybutterfly.stimmtraining.ui.list.RecordingListScreen
 import de.emilybutterfly.stimmtraining.ui.pitch.PitchHistoryScreen
 import de.emilybutterfly.stimmtraining.ui.record.RecordScreen
 import de.emilybutterfly.stimmtraining.ui.record.RecordViewModel
+import de.emilybutterfly.stimmtraining.ui.settings.SettingsScreen
 import de.emilybutterfly.stimmtraining.ui.techniques.TechniqueDetailScreen
 import de.emilybutterfly.stimmtraining.ui.techniques.TechniquesScreen
 import de.emilybutterfly.stimmtraining.ui.theme.StimmtrainingTheme
@@ -35,9 +38,12 @@ class MainActivity : ComponentActivity() {
             container.appScope.launch(Dispatchers.IO) { container.files.cleanOldDrafts() }
         }
         enableEdgeToEdge()
+        val settings = (application as StimmtrainingApp).container.settings
         setContent {
             StimmtrainingTheme {
-                AppNavigation()
+                CompositionLocalProvider(LocalAppSettings provides settings) {
+                    AppNavigation()
+                }
             }
         }
     }
@@ -62,7 +68,11 @@ private fun AppNavigation() {
                 onOpenBackup = { navController.fromCurrent(entry) { navigate("backup") } },
                 onOpenTechniques = { navController.fromCurrent(entry) { navigate("techniques") } },
                 onOpenPitchHistory = { navController.fromCurrent(entry) { navigate("pitch") } },
+                onOpenSettings = { navController.fromCurrent(entry) { navigate("settings") } },
             )
+        }
+        composable("settings") { entry ->
+            SettingsScreen(onClose = { navController.fromCurrent(entry) { popBackStack() } })
         }
         composable("pitch") { entry ->
             PitchHistoryScreen(

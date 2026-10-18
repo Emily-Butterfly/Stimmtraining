@@ -1,6 +1,8 @@
 package de.emilybutterfly.stimmtraining.ui
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -112,6 +114,37 @@ class AppSmokeTest {
         text("E3").assertExists()
         text("D4").assertExists()
         text("220 Hz").assertExists()
+    }
+
+    @Test
+    fun gentleModeHidesPitchEverywhere() {
+        val container = ApplicationProvider.getApplicationContext<StimmtrainingApp>().container
+        runBlocking {
+            val audio = container.files.newDraftFile("m4a").apply { writeBytes(ByteArray(10)) }
+            val id = container.repository.create(audio, null, System.currentTimeMillis(), 30_000, RecordingParams(title = "Tonleiter"))
+            container.repository.savePitch(id, PitchResult(mostFrequent = 57, lowest = 52, highest = 62, voicedMs = 12_000))
+        }
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("E3 · A3 · D4") }
+
+        // Schnell ausblenden direkt an der Karte …
+        text("Tonleiter").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Häufigste") }
+        compose.onNodeWithContentDescription("Tonhöhe ausblenden").performScrollTo().performClick()
+        compose.waitUntil(5_000) { !compose.onAllNodesWithTextExists("Häufigste") }
+        assertEquals(true, container.settings.gentleMode.value)
+        compose.onNodeWithContentDescription("Zurück").performClick()
+
+        // … dann ist sie überall weg: keine Noten in der Liste, kein Verlauf.
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("Tonleiter") }
+        assertEquals(false, compose.onAllNodesWithTextExists("E3 · A3 · D4"))
+        compose.onAllNodes(hasContentDescription("Tonhöhen-Verlauf")).assertCountEquals(0)
+
+        // In den Einstellungen wieder einblenden.
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        text("Sanfter Modus").performClick()
+        assertEquals(false, container.settings.gentleMode.value)
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTextExists("E3 · A3 · D4") }
     }
 
     @Test

@@ -367,7 +367,8 @@
         "Hält eine Heiserkeit länger als zwei Wochen an, lass dich ärztlich untersuchen, am besten in der HNO-Heilkunde oder Phoniatrie, und such dir logopädische Begleitung.",
         "Geh ohne abzuwarten zur Ärztin oder zum Arzt, wenn du beim Sprechen oder Schlucken Schmerzen oder Beschwerden hast, Blut hustest, einen Knoten am Hals bemerkst oder deine Stimme mehrere Tage ganz weg ist. Bei Atemnot hol dir sofort Hilfe.",
         "Diese App ersetzt keine Logopädie. Eine logopädische Fachperson mit Erfahrung im Stimmtraining für trans Personen kann Twang sicher mit dir aufbauen und Fehler früh erkennen."
-      ]
+      ],
+      "whyGentle": "Twang verlagert Klangenergie in höhere Frequenzbereiche. Deine Stimme klingt dadurch heller und strahlender. Das ergänzt die Arbeit an der Resonanz, also daran, wie Rachen und Mund deinen Klang formen. Sie prägt zusammen mit der Tonhöhe stark, wie deine Stimme klingt. Wie klein deine Stimme wirkt, steuerst du dagegen vor allem über Kehlkopfhöhe, Zunge und Lippen, mehr dazu bei Resonanz und Größe. Twang klingt von selbst etwas lauter. Das ist gewollt: Deine Stimme trägt, etwa im Café oder in einer Gruppe, ohne dass du mehr Kraft gibst. Am besten wirkt Twang in kleiner Dosis und mit wenig Stimmgewicht, also mit einer leichten statt schweren, brummigen Stimme. Zu viel Twang klingt schnell scharf, spitz oder angestrengt."
     },
     {
       "id": "tonhoehe",
@@ -415,6 +416,16 @@
             "Du sprichst ganz normal, ohne schon zu üben.",
             "Du nimmst unter ähnlichen Bedingungen auf, etwa gleich laut und zur gleichen Tageszeit.",
             "Du notierst einen Bereich, keinen einzelnen exakten Wert."
+          ],
+          "stepsGentle": [
+            "Starte die Aufnahme hier in der App und lies in deiner gewohnten, entspannten Stimme: „Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der Stärkere wäre.“",
+            "Zähle danach locker von eins bis zehn und beende die Aufnahme.",
+            "Du musst dir die Aufnahme jetzt nicht anhören. Sie ist einfach da, wenn du später einmal vergleichen möchtest.",
+            "Wiederhole das einmal pro Woche mit genau demselben Satz."
+          ],
+          "checksGentle": [
+            "Du sprichst ganz normal, ohne schon zu üben.",
+            "Du nimmst unter ähnlichen Bedingungen auf, etwa gleich laut und zur gleichen Tageszeit."
           ]
         },
         {
@@ -439,6 +450,14 @@
             "Du könntest auf diesem Ton entspannt ein längeres Gespräch führen.",
             "Der Ton klingt weder gequetscht noch hauchig.",
             "Nach oben ist noch Luft."
+          ],
+          "stepsGentle": [
+            "Summe nach dem Aufwärmen ein leichtes, zustimmendes „mhm“, etwas höher als gewohnt.",
+            "Probiere ein paar Töne darüber und darunter.",
+            "Wähle einen Ton, der sich mühelos anfühlt und bei dem du noch gut Melodie nach oben und unten machen kannst.",
+            "Summe diesen Ton und sprich dann darauf: „mhm, ja“, „mhm, genau“.",
+            "Zähle auf dem Zielton von eins bis fünf, erst gleichmäßig, dann mit natürlicher Sprechmelodie.",
+            "Du musst dein Ziel nicht weiter anheben. Wenn du es möchtest, dann nur in kleinen Schritten über Wochen und nur, solange es mühelos bleibt."
           ]
         },
         {
@@ -464,6 +483,14 @@
             "Deine Tonhöhe bewegt sich, bleibt im Mittel aber in deinem Zielbereich.",
             "Die Satzenden fallen nicht in ein tiefes Knarren.",
             "Nach fünf Minuten fühlt sich die Stimme nicht müde oder kratzig an."
+          ],
+          "stepsGentle": [
+            "Gleite auf „mmm“ von unten in deinen Zielton und bleib kurz dort.",
+            "Sprich vom Zielton aus ein Wort: „mmm-Mona“, „mmm-Montag“.",
+            "Steigere dich Stufe für Stufe: Silbe, Wort, kurze Phrase, ganzer Satz.",
+            "Lies zwei, drei Sätze. Die Melodie darf auf und ab gehen und um deinen Zielbereich kreisen, nicht an einem Ton kleben.",
+            "Achte darauf, ob deine Stimme am Satzende absackt. Nimm erst danach hier auf.",
+            "Nimm den Nordwind-Satz auf und vergleiche ihn mit deiner Ausgangsaufnahme."
           ]
         }
       ],
@@ -479,6 +506,20 @@
         "Dauerhaft zu hoch und gepresst zu sprechen kann die Stimmlippen überlasten.",
         "Bei Kratzen, Druckgefühl oder Heiserkeit sofort aufhören. Übe erst wieder, wenn sich deine Stimme frei anfühlt, und dann kürzer und entspannter.",
         "Eine logopädische Praxis kann mit dir einen gesunden Zielbereich festlegen. Diese App ersetzt das nicht."
+      ],
+      "introGentle": "Die Tonhöhe ist, wie hoch oder tief deine Stimme klingt. Sie prägt deinen Klang stark, wirkt aber erst zusammen mit Resonanz und Stimmgewicht stimmig und mühelos. Deshalb übst du Tonhöhe immer zusammen mit beidem – nach Gefühl und Klang, nicht nach Zahlen.",
+      "whyGentle": "Tonhöhe, Resonanz und Stimmgewicht wirken zusammen; erst gemeinsam klingt deine Stimme stimmig. Es gibt keinen Ton, den du erreichen musst. Entscheidend ist, dass sich deine Stimme für dich richtig anfühlt und du sie entspannt halten kannst – auch in einem langen Gespräch.",
+      "howToFindGentle": [
+        "Summe ein zustimmendes „mhm“, etwas höher als sonst. Dieser Ton ist oft ein guter Startpunkt.",
+        "Am Klavier oder in einer Klavier-App kannst du einen angenehmen Ton anschlagen und mitsummen.",
+        "Dein Zielbereich fühlt sich mühelos an und lässt nach oben noch Platz für Melodie.",
+        "Wird es eng, quietschig oder spürst du deinen Hals, bist du zu hoch."
+      ],
+      "pitfallsGentle": [
+        "Zu hoch zielen. Das klingt schnell gepresst und ermüdet.",
+        "Monoton auf einem Ton bleiben statt mit Melodie zu sprechen.",
+        "Am Satzende tief absacken.",
+        "Das Ziel zu schnell nach oben schrauben."
       ]
     },
     {
@@ -527,6 +568,14 @@
             "Du spürst den Kehlkopf steigen, ohne dass der Hals eng wird.",
             "Der Satz klingt kleiner und heller, aber nicht gepresst.",
             "Die Tonhöhe steigt nicht automatisch stark mit. Größe und Höhe sind getrennte Regler."
+          ],
+          "stepsGentle": [
+            "Hechle tonlos wie ein großer, schwerer Hund: tief und dunkel, „hhoh-hhoh“. Der Kehlkopf geht nach unten.",
+            "Hechle jetzt wie ein ganz kleiner Hund: hell und leicht, „hhih-hhih“. Der Kehlkopf geht nach oben.",
+            "Wechsle ein paarmal langsam hin und her, immer nur wenige Atemzüge lang. Ein Finger am Kehlkopf hilft dir, die Bewegung zu spüren.",
+            "Bleib beim kleinen Hund und gib einen leisen Ton dazu: „hi“, „ja“, „nie“.",
+            "Sprich aus dieser Einstellung kurze Wörter und dann einen ganzen Satz.",
+            "Nimm den Satz als kleiner Hund auf."
           ]
         },
         {
@@ -593,7 +642,8 @@
         "Hechle nur ein paar Atemzüge am Stück. Wird dir schwindlig, atme normal weiter und mach eine Pause.",
         "Hör auf bei Engegefühl, Schmerz oder Schluckbeschwerden.",
         "Mach Pausen, auch wenn es gerade gut läuft."
-      ]
+      ],
+      "whyGentle": "Die Klangfarbe, akustisch die Formanten, prägt deine Stimme mindestens so stark wie die Tonhöhe. Eine kleine, helle Resonanz lässt deine Stimme leicht und stimmig klingen, auch ohne dass du höher sprechen musst. Resonanz ist außerdem schonend, weil sie keine zusätzliche Höhe von den Stimmlippen verlangt."
     },
     {
       "id": "stimmgewicht",
@@ -639,6 +689,13 @@
             "Bei gleicher Tonhöhe und Lautstärke spürt die Hand bei der leichten Version weniger Vibration.",
             "Der leichte Ton ist klar, ohne Rauschen.",
             "Du hast am Satzende noch genug Luft."
+          ],
+          "stepsGentle": [
+            "Sprich „Guten Tag, ich hätte gern einen Termin.“ absichtlich schwer, wie ein gewichtiger Bürokrat: langsam, voll, dröhnend. Nicht laut werden.",
+            "Sprich denselben Satz jetzt ganz leicht, fast schwebend, auf ähnlicher Tonhöhe.",
+            "Stell dir eine Skala von 1 bis 5 vor: 1 ist schwer, 5 ist so leicht, dass es hauchig wird. Sprich den Satz auf jeder Stufe.",
+            "Such die Stufe, die leicht, aber noch klar und tragfähig klingt. Das ist dein Arbeitsbereich.",
+            "Nimm deine leichte Version auf."
           ]
         },
         {
@@ -701,7 +758,8 @@
         "Wenn du ständig nach Luft schnappst, ist die Stimme zu hauchig.",
         "Auch die schwere Kontrastversion nur kurz, ohne Pressen und nicht laut.",
         "Bei Heiserkeit oder Kratzen mach eine Pause."
-      ]
+      ],
+      "whyGentle": "Eine leichte Stimme passt zu einer etwas höheren Tonhöhe und einer kleinen Resonanz, erst das Zusammenspiel klingt natürlich. Leicht heißt aber nicht hauchig. Eine hauchige Stimme verbraucht viel Luft, ermüdet schnell und klingt auf Dauer kraftlos."
     },
     {
       "id": "intonation",
@@ -815,7 +873,8 @@
         "Auch bei großer Melodie oben nicht drücken.",
         "Zungenbrecher locker sprechen, ohne Spannung im Kiefer.",
         "Wenn du müde bist, lieber leise und kurz üben."
-      ]
+      ],
+      "whyGentle": "Eine höhere Stimme ohne Melodie klingt schnell künstlich und ist anstrengend. Eine lebendige Melodie macht deine Stimme ausdrucksvoll und hilft dir, im Zielbereich zu bleiben, ohne an einem Ton festzukleben. Klare, vorn gebildete Konsonanten unterstützen den hellen Klang."
     },
     {
       "id": "stimmgesundheit",
