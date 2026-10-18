@@ -44,6 +44,13 @@ class TextDocumentBuilder(private val maxChars: Int = DEFAULT_MAX_CHARS) {
     private var currentBold = false
     private var currentItalic = false
     private var chars = 0
+    private var blockChars = 0
+
+    /**
+     * Zeichen im offenen Absatz. Leser beginnen ab [LONG_BLOCK_CHARS] an einem Zeilenumbruch einen
+     * neuen Absatz, denn die Anzeige setzt jeden Absatz am Stück.
+     */
+    internal val currentBlockLength: Int get() = blockChars
 
     /** true, sobald die Höchstmenge erreicht ist; Leser können dann aufhören. */
     var isFull: Boolean = false
@@ -58,10 +65,12 @@ class TextDocumentBuilder(private val maxChars: Int = DEFAULT_MAX_CHARS) {
         if (text.length >= remaining) {
             current.append(text, 0, remaining)
             chars = maxChars
+            blockChars += remaining
             isFull = true
         } else {
             current.append(text)
             chars += text.length
+            blockChars += text.length
         }
     }
 
@@ -75,6 +84,7 @@ class TextDocumentBuilder(private val maxChars: Int = DEFAULT_MAX_CHARS) {
         flushSpan()
         val trimmed = trim(spans)
         spans.clear()
+        blockChars = 0
         if (trimmed.isNotEmpty()) blocks += TextBlock(trimmed, style, marker, level.coerceIn(0, MAX_LEVEL))
     }
 
@@ -93,6 +103,9 @@ class TextDocumentBuilder(private val maxChars: Int = DEFAULT_MAX_CHARS) {
         /** Etwa 150 Buchseiten – deutlich mehr, als man am Stück vorliest. */
         const val DEFAULT_MAX_CHARS = 300_000
         private const val MAX_LEVEL = 8
+
+        /** Ab dieser Länge teilen die Leser einen Absatz am nächsten Zeilenumbruch; kürzere bleiben unverändert. */
+        internal const val LONG_BLOCK_CHARS = 2_000
 
         /** Entfernt Leerraum am Anfang und Ende des Absatzes; nur Leerraum ergibt eine leere Liste. */
         private fun trim(spans: List<TextSpan>): List<TextSpan> {

@@ -6,12 +6,12 @@ package de.emilybutterfly.stimmtraining.data.document
  * Ansichten – erhalten, weil Lesetexte und Gedichte davon leben.
  */
 internal object MarkdownReader {
-    private val ATX_HEADING = Regex("""^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$""")
+    // Keine wiederholten Gruppen und kein „.*?“ vor Leerraum: Bei sehr langen Zeilen liefe die
+    // Regex sonst quadratisch lange oder in einen StackOverflowError. Regeln und Zitate per Hand.
+    private val ATX_HEADING = Regex("""^ {0,3}(#{1,6})(?:[ \t]+(.*))?$""")
     private val SETEXT_1 = Regex("""^ {0,3}=+[ \t]*$""")
     private val SETEXT_2 = Regex("""^ {0,3}-+[ \t]*$""")
-    private val RULE = Regex("""^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$""")
     private val FENCE = Regex("""^([ \t]*)(`{3,}|~{3,})(.*)$""")
-    private val QUOTE = Regex("""^(?: {0,3}> ?)+""")
     private val BULLET = Regex("""^([ \t]*)([-*+])(?:[ \t]+(.*))?$""")
     private val ORDERED = Regex("""^([ \t]*)(\d{1,9})[.)](?:[ \t]+(.*))?$""")
     private val LINK_DEFINITION = Regex("""^ {0,3}\[[^\]]+]:\s*\S.*$""")
@@ -35,6 +35,42 @@ internal object MarkdownReader {
             if (line == "---" || line == "...") return i + 1
         }
         return 0
+    }
+
+    /** Text einer ATX-Überschrift ohne schließende Rauten ("## Titel ##"); nur Rauten bleiben stehen. */
+    private fun atxText(content: String): String {
+        val text = content.trimEnd('#')
+        return if (text.endsWith(' ') || text.endsWith('\t')) text.trimEnd(' ', '\t') else content
+    }
+
+    /** Trennlinie: mindestens drei gleiche *, - oder _, dazwischen nur Leerraum. */
+    private fun isRule(line: String): Boolean {
+        var i = 0
+        while (i < 3 && i < line.length && line[i] == ' ') i++
+        val c = line.getOrNull(i) ?: return false
+        if (c != '*' && c != '-' && c != '_') return false
+        var count = 0
+        for (k in i until line.length) {
+            when (line[k]) {
+                c -> count++
+                ' ', '\t' -> Unit
+                else -> return false
+            }
+        }
+        return count >= 3
+    }
+
+    /** Länge der Zitatzeichen am Zeilenanfang ("> ", auch "> > "), 0 ohne. */
+    private fun quotePrefix(line: String): Int {
+        var end = 0
+        while (true) {
+            var i = end
+            while (i < end + 3 && i < line.length && line[i] == ' ') i++
+            if (i >= line.length || line[i] != '>') return end
+            i++
+            if (i < line.length && line[i] == ' ') i++
+            end = i
+        }
     }
 
     /** Einrückung in Spalten; Tabulatoren springen auf das nächste Vielfache von 4. */
@@ -82,7 +118,7 @@ internal object MarkdownReader {
             ATX_HEADING.matchEntire(line)?.let { match ->
                 close()
                 listIndents.clear()
-                lines += match.groupValues[2]
+                lines += atxText(match.groupValues[2])
                 style = StyleNames.heading(match.groupValues[1].length)
                 close()
                 return
@@ -91,13 +127,14 @@ internal object MarkdownReader {
                 if (SETEXT_1.matches(line)) return close(BlockStyle.Heading1)
                 if (SETEXT_2.matches(line)) return close(BlockStyle.Heading2)
             }
-            if (RULE.matches(line)) {
+            if (isRule(line)) {
                 close()
                 listIndents.clear()
                 return
             }
-            QUOTE.find(line)?.let { match ->
-                val content = line.substring(match.range.last + 1).trim()
+            val quote = quotePrefix(line)
+            if (quote > 0) {
+                val content = line.substring(quote).trim()
                 if (content.isEmpty()) {
                     close()
                     return
@@ -149,16 +186,26 @@ internal object MarkdownReader {
         fun close(override: BlockStyle? = null) {
             val style = style
             if (style != null) {
+                val blockStyle = override ?: style
+                val item = style == BlockStyle.ListItem
+                var blockMarker = if (item) marker else null
+                val blockLevel = if (item) level else 0
+                // Lange Absätze werden an Zeilenumbrüchen geteilt; das Aufzählungszeichen bekommt nur der erste Teil.
+                val split = {
+                    builder.endBlock(blockStyle, blockMarker, blockLevel)
+                    blockMarker = null
+                }
                 if (fence != null) {
                     lines.forEachIndexed { index, line ->
-                        if (index > 0) builder.lineBreak()
+                        if (index > 0) {
+                            if (builder.currentBlockLength > TextDocumentBuilder.LONG_BLOCK_CHARS) split() else builder.lineBreak()
+                        }
                         builder.append(line)
                     }
                 } else {
-                    MarkdownInline.emit(lines.joinToString("\n"), builder)
+                    MarkdownInline.emit(lines.joinToString("\n"), builder, split)
                 }
-                val item = style == BlockStyle.ListItem
-                builder.endBlock(override ?: style, if (item) marker else null, if (item) level else 0)
+                builder.endBlock(blockStyle, blockMarker, blockLevel)
             }
             lines.clear()
             this.style = null
@@ -182,19 +229,35 @@ private object MarkdownInline {
     private const val MAX_LINK_LENGTH = 2_000
     private const val MAX_NESTING = 4
 
+    /** Längere Autolinks und Tags bleiben Text; so durchsucht nicht jedes '<' den ganzen Absatz. */
+    private const val MAX_HTML_LENGTH = 2_000
+
+    /** Womit eine E-Mail-Adresse außer Buchstaben und Ziffern beginnen kann (umfasst '/' und '!'). */
+    private const val EMAIL_PUNCTUATION = ".!#$%&'*+/=?^_`{|}~-"
+
     private val AUTOLINK = Regex("""<([A-Za-z][A-Za-z0-9+.\-]{1,31}:[^<>\s]*)>""")
-    private val EMAIL = Regex("""<([A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*)>""")
+    // "*+" (possessiv) wiederholt die Gruppe ohne Rekursion; gefunden wird dasselbe.
+    private val EMAIL = Regex("""<([A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*+)>""")
     private val TAG = Regex("""</?([A-Za-z][A-Za-z0-9-]*)(?:\s[^<>]*)?/?>""")
-    private val COMMENT = Regex("""<!--.*?-->""", RegexOption.DOT_MATCHES_ALL)
 
     private class Text(val text: String)
+
+    /** Was die Suche in einem Absatz schon weiß; vergebliche Suchen bis zum Ende laufen so nur einmal. */
+    private class Scan {
+        /** Ab hier gibt es kein "-->" mehr. */
+        var noCommentEnd = Int.MAX_VALUE
+
+        /** Je Länge einer Backtick-Folge: wo die letzte solche Folge beginnt. */
+        var backtickRuns: Map<Int, Int>? = null
+    }
 
     private class Delimiter(val char: Char, val length: Int, val canOpen: Boolean, val canClose: Boolean) {
         var count = length
         var active = true
     }
 
-    fun emit(source: String, builder: TextDocumentBuilder) {
+    /** [split] beendet den Absatz, wenn er an einem Zeilenumbruch schon zu lang ist. */
+    fun emit(source: String, builder: TextDocumentBuilder, split: () -> Unit) {
         val tokens = ArrayList<Any>()
         tokenize(source, tokens, 0)
         val bold = IntArray(tokens.size + 1)
@@ -210,11 +273,23 @@ private object MarkdownInline {
                 is Delimiter -> token.char.toString().repeat(token.count)
                 else -> ""
             }
-            builder.append(text, boldDepth > 0, italicDepth > 0)
+            append(text, builder, boldDepth > 0, italicDepth > 0, split)
+        }
+    }
+
+    private fun append(text: String, builder: TextDocumentBuilder, bold: Boolean, italic: Boolean, split: () -> Unit) {
+        var start = 0
+        while (true) {
+            val end = text.indexOf('\n', start)
+            if (end < 0) return builder.append(text.substring(start), bold, italic)
+            builder.append(text.substring(start, end), bold, italic)
+            if (builder.currentBlockLength > TextDocumentBuilder.LONG_BLOCK_CHARS) split() else builder.append("\n", bold, italic)
+            start = end + 1
         }
     }
 
     private fun tokenize(s: String, out: MutableList<Any>, nesting: Int) {
+        val scan = Scan()
         val text = StringBuilder()
         fun flush() {
             if (text.isNotEmpty()) out += Text(text.toString())
@@ -233,7 +308,9 @@ private object MarkdownInline {
                 c == '\\' && next == '\n' -> i++
                 c == '`' -> {
                     val run = runLength(s, i)
-                    val close = closingBackticks(s, i + run, run)
+                    // Nur suchen, wenn dahinter überhaupt eine Folge gleicher Länge steht.
+                    val runs = scan.backtickRuns ?: backtickRuns(s).also { scan.backtickRuns = it }
+                    val close = if ((runs[run] ?: -1) >= i + run) closingBackticks(s, i + run, run) else -1
                     if (close < 0) {
                         text.append(s, i, i + run)
                         i += run
@@ -259,7 +336,7 @@ private object MarkdownInline {
                     }
                 }
                 c == '<' -> {
-                    val html = html(s, i)
+                    val html = html(s, i, scan)
                     if (html == null) {
                         text.append(c)
                         i++
@@ -364,6 +441,18 @@ private object MarkdownInline {
         return end - start
     }
 
+    /** Länge → Beginn der letzten Backtick-Folge dieser Länge. */
+    private fun backtickRuns(s: String): Map<Int, Int> {
+        val runs = HashMap<Int, Int>()
+        var i = s.indexOf('`')
+        while (i >= 0) {
+            val run = runLength(s, i)
+            runs[run] = i
+            i = s.indexOf('`', i + run)
+        }
+        return runs
+    }
+
     private fun closingBackticks(s: String, from: Int, length: Int): Int {
         var i = from
         while (i < s.length) {
@@ -404,13 +493,40 @@ private object MarkdownInline {
         return null
     }
 
-    /** Autolinks werden zu ihrem Text, `<br>` zum Umbruch, andere HTML-Tags verschwinden. */
-    private fun html(s: String, start: Int): Pair<String, Int>? {
-        AUTOLINK.matchAt(s, start)?.let { return it.groupValues[1] to it.range.last + 1 }
-        EMAIL.matchAt(s, start)?.let { return it.groupValues[1] to it.range.last + 1 }
-        COMMENT.matchAt(s, start)?.let { return "" to it.range.last + 1 }
-        TAG.matchAt(s, start)?.let { return (if (it.groupValues[1].equals("br", ignoreCase = true)) "\n" else "") to it.range.last + 1 }
+    /**
+     * Autolinks werden zu ihrem Text, `<br>` zum Umbruch, andere HTML-Tags verschwinden.
+     * Die Ausdrücke laufen nur über das kurze Stück bis zum '>': Auf Android kopiert jeder
+     * Matcher seine ganze Eingabe, bei vielen '<' im Absatz wäre das quadratisch.
+     */
+    private fun html(s: String, start: Int, scan: Scan): Pair<String, Int>? {
+        val next = s.getOrNull(start + 1) ?: return null
+        if (!(next in 'a'..'z' || next in 'A'..'Z' || next in '0'..'9' || next in EMAIL_PUNCTUATION)) return null
+        // Autolinks, Adressen und Tags enden am ersten '>' und enthalten kein '<'.
+        val limit = minOf(s.length, start + MAX_HTML_LENGTH)
+        var end = start + 1
+        while (end < limit && s[end] != '>' && s[end] != '<') end++
+        val candidate = if (end < limit && s[end] == '>') s.substring(start, end + 1) else null
+        if (candidate != null) {
+            AUTOLINK.matchEntire(candidate)?.let { return it.groupValues[1] to end + 1 }
+            EMAIL.matchEntire(candidate)?.let { return it.groupValues[1] to end + 1 }
+        }
+        if (s.startsWith("<!--", start)) commentEnd(s, start, scan)?.let { return "" to it }
+        if (candidate != null) {
+            TAG.matchEntire(candidate)?.let { return (if (it.groupValues[1].equals("br", ignoreCase = true)) "\n" else "") to end + 1 }
+        }
         return null
+    }
+
+    /** Position hinter dem "-->" eines Kommentars ab [start]; null, wenn er nicht endet. */
+    private fun commentEnd(s: String, start: Int, scan: Scan): Int? {
+        val from = start + 4
+        if (from >= scan.noCommentEnd) return null
+        val end = s.indexOf("-->", from)
+        if (end < 0) {
+            scan.noCommentEnd = from
+            return null
+        }
+        return end + 3
     }
 
     private fun Char.isPunctuation(): Boolean = this in ASCII_PUNCTUATION || when (Character.getType(this).toByte()) {

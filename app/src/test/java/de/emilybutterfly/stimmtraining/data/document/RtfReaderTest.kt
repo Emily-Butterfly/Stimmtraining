@@ -196,4 +196,22 @@ Einst stritten sich Nordwind und Sonne, wer von ihnen beiden wohl der St\u228\'e
         assertTrue(document.truncated)
         assertTrue(document.blocks.sumOf { it.text.length } <= 100)
     }
+
+    @Test
+    fun longTextIsDecodedInPartsWithoutSplittingCharacters() {
+        fun readInParts(rtf: String): String {
+            val file = folder.newFile().apply { writeBytes(rtf.toByteArray(Charsets.ISO_8859_1)) }
+            val builder = TextDocumentBuilder()
+            RtfReader.read(file, builder, maxPendingBytes = 3)
+            return builder.build().plainText
+        }
+        assertEquals("あいうえお", readInParts("""{\rtf1\ansi\ansicpg932 \'82\'a0\'82\'a2\'82\'a4\'82\'a6\'82\'a8\par}"""))
+        assertEquals("Grüße aus Köln", readInParts("""{\rtf1\ansi\ansicpg65001 Gr\'c3\'bc\'c3\'9fe aus K\'c3\'b6ln\par}"""))
+        assertEquals("Привет мир", readInParts("""{\rtf1\ansi\ansicpg1251 \'cf\'f0\'e8\'e2\'e5\'f2 \'ec\'e8\'f0\par}"""))
+
+        // Viel Text ohne Steuerwort: Das Lesen endet, sobald genug Text da ist.
+        val document = read("{\\rtf1\\ansi " + "Text".repeat(750_000) + "}")
+        assertTrue(document.truncated)
+        assertEquals(TextDocumentBuilder.DEFAULT_MAX_CHARS, document.plainText.length)
+    }
 }

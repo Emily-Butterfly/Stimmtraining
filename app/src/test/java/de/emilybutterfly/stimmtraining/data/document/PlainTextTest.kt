@@ -51,4 +51,15 @@ class PlainTextTest {
         assertTrue(document.plainText.length <= 1_000)
         assertFalse(read(poem.toByteArray()).truncated)
     }
+
+    @Test
+    fun linesWithoutBlankLinesAreSplitIntoShortBlocks() {
+        // Ein Absatz je Zeile, keine Leerzeilen: wie aus dem Editor oder einem Messenger kopiert.
+        val lines = (1..300).map { "Zeile $it: Einst stritten sich Nordwind und Sonne." }
+        val document = read((lines.joinToString("\n") + "\n\nLetzter Absatz").toByteArray())
+        assertTrue(document.blocks.size > 5)
+        assertTrue(document.blocks.all { it.text.length <= TextDocumentBuilder.LONG_BLOCK_CHARS + 60 })
+        assertEquals(lines + "Letzter Absatz", document.blocks.flatMap { it.text.split("\n") })
+        assertEquals("Letzter Absatz", document.blocks.last().text)
+    }
 }

@@ -12,20 +12,28 @@ import java.util.zip.ZipFile
 internal class DocumentReadException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
 /**
- * Liest XML-Teile aus ZIP-basierten Dokumenten (DOCX, ODT). Die entpackte Größe ist begrenzt,
- * damit eine präparierte Datei („ZIP-Bombe“) nicht den Speicher füllt.
+ * Liest XML-Teile aus ZIP-basierten Dokumenten (DOCX, ODT). Die entpackte Größe und die
+ * Verschachtelungstiefe sind begrenzt, damit eine präparierte Datei („ZIP-Bombe“, ein riesiger
+ * Textknoten, endlos verschachtelte Elemente) nicht den Speicher füllt.
  */
 internal object ZipParts {
-    const val MAX_BYTES = 64L * 1024 * 1024
+    /** Ein einzelner Textknoten wird vom Parser am Stück gepuffert; mehr verträgt ein schwaches Gerät nicht sicher. */
+    const val MAX_BYTES = 16L * 1024 * 1024
+
+    /** Echte Dokumente kommen auch mit Tabellen in Textfeldern mit einem Bruchteil davon aus. */
+    const val MAX_DEPTH = 256
 
     fun open(zip: ZipFile, name: String, maxBytes: Long): InputStream? {
         val entry = zip.getEntry(name) ?: return null
         return LimitedInputStream(zip.getInputStream(entry), maxBytes)
     }
 
-    /** Parser mit Namensräumen, positioniert auf dem Wurzelelement. */
+    /**
+     * Parser mit Namensräumen, positioniert auf dem Wurzelelement. Elemente tiefer als [MAX_DEPTH]
+     * beenden das Lesen mit einer [XmlPullParserException] – in jeder Leseschleife, auch beim Überspringen.
+     */
     fun parser(input: InputStream): XmlPullParser {
-        val parser = Xml.newPullParser()
+        val parser: XmlPullParser = DepthLimitedParser(Xml.newPullParser())
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
         parser.setInput(input, null)
         while (true) {
@@ -46,6 +54,17 @@ internal object ZipParts {
                 XmlPullParser.END_TAG -> if (parser.depth == depth) return
                 XmlPullParser.END_DOCUMENT -> throw XmlPullParserException("Unerwartetes Ende")
             }
+        }
+    }
+
+    private class DepthLimitedParser(private val parser: XmlPullParser) : XmlPullParser by parser {
+        override fun next(): Int = checked(parser.next())
+        override fun nextToken(): Int = checked(parser.nextToken())
+        override fun nextTag(): Int = checked(parser.nextTag())
+
+        private fun checked(event: Int): Int {
+            if (event == XmlPullParser.START_TAG && parser.depth > MAX_DEPTH) throw XmlPullParserException("zu tief verschachtelt")
+            return event
         }
     }
 

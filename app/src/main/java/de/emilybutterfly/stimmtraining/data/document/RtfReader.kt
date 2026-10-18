@@ -5,7 +5,10 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
 import java.nio.charset.Charset
+import java.nio.charset.CodingErrorAction
 
 /**
  * RTF (Word, WordPad, LibreOffice, TextEdit) mit einem kleinen Tokenizer: Gruppen mit
@@ -16,6 +19,12 @@ import java.nio.charset.Charset
 internal object RtfReader {
     /** Mehr Verschachtelung kommt in echten Dateien nicht vor. */
     private const val MAX_DEPTH = 1_000
+
+    /** Langer Text ohne Steuerwort wird spätestens nach so vielen Bytes dekodiert, statt den Puffer wachsen zu lassen. */
+    private const val MAX_PENDING_BYTES = 1024 * 1024
+
+    /** Formatvorlagennamen sind kurz; mehr wird nicht gesammelt. */
+    private const val MAX_STYLE_NAME = 256
 
     private val SKIPPED = setOf(
         "colortbl", "info", "pict", "object", "header", "headerl", "headerr", "headerf", "footer", "footerl",
@@ -41,8 +50,8 @@ internal object RtfReader {
         163 to 1258, 177 to 1255, 178 to 1256, 186 to 1257, 204 to 1251, 222 to 874, 238 to 1250, 255 to 437,
     )
 
-    fun read(file: File, builder: TextDocumentBuilder) {
-        file.inputStream().use { Parser(Source(it), builder).run() }
+    fun read(file: File, builder: TextDocumentBuilder, maxPendingBytes: Int = MAX_PENDING_BYTES) {
+        file.inputStream().use { Parser(Source(it), builder, maxPendingBytes).run() }
     }
 
     private fun codepage(number: Int): Charset? {
@@ -101,7 +110,11 @@ internal object RtfReader {
         }
     }
 
-    private class Parser(private val source: Source, private val builder: TextDocumentBuilder) {
+    private class Parser(
+        private val source: Source,
+        private val builder: TextDocumentBuilder,
+        private val maxPendingBytes: Int,
+    ) {
         private val stack = ArrayList<State>()
         private var state = State()
 
@@ -174,11 +187,14 @@ internal object RtfReader {
                 return
             }
             when (state.destination) {
-                Destination.Text -> if (c >= 0x20 || c == '\t'.code) pending.write(c)
+                Destination.Text -> if (c >= 0x20 || c == '\t'.code) {
+                    pending.write(c)
+                    if (pending.size() >= maxPendingBytes) flushPart()
+                }
                 Destination.StyleSheet -> if (c == ';'.code) {
                     styleNames[state.entry] = styleName.toString().trim()
                     styleName.setLength(0)
-                } else {
+                } else if (styleName.length < MAX_STYLE_NAME) {
                     styleName.append(c.toChar())
                 }
                 else -> Unit
@@ -329,6 +345,19 @@ internal object RtfReader {
             val bytes = pending.toByteArray()
             pending.reset()
             text(String(bytes, fontCharset(state.font) ?: charset))
+        }
+
+        /** Wie [flush], aber ein angefangenes Doppelbyte-Zeichen am Ende bleibt im Puffer. */
+        private fun flushPart() {
+            val bytes = ByteBuffer.wrap(pending.toByteArray())
+            pending.reset()
+            val decoder = (fontCharset(state.font) ?: charset).newDecoder()
+                .onMalformedInput(CodingErrorAction.REPLACE)
+                .onUnmappableCharacter(CodingErrorAction.REPLACE)
+            val chars = CharBuffer.allocate((bytes.remaining() * decoder.maxCharsPerByte()).toInt() + 1)
+            decoder.decode(bytes, chars, false)
+            pending.write(bytes.array(), bytes.position(), bytes.remaining())
+            text(String(chars.array(), 0, chars.position()))
         }
 
         private fun fontCharset(font: Int): Charset? {

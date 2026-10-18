@@ -4,6 +4,7 @@ import android.app.Application
 import de.emilybutterfly.stimmtraining.data.document.TestDocuments.assertOutline
 import de.emilybutterfly.stimmtraining.data.document.TestDocuments.markup
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -173,5 +174,30 @@ class HtmlReaderTest {
         val document = read("<p>" + "Sehr langer Text. ".repeat(1_000) + "</p>", maxChars = 1_000)
         assertTrue(document.truncated)
         assertEquals(1_000, document.blocks.single().text.length)
+    }
+
+    @Test
+    fun longPreformattedTextAndLineBreaksAreSplit() {
+        val lines = (1..200).map { "Zeile $it mit etwas Text, damit der Absatz lang wird." }
+        val pre = read("<pre>" + lines.joinToString("\n") + "</pre><p>Danach</p>")
+        assertTrue(pre.blocks.size > 4)
+        assertTrue(pre.blocks.all { it.text.length <= TextDocumentBuilder.LONG_BLOCK_CHARS + 60 })
+        assertEquals(lines + "Danach", pre.blocks.flatMap { it.text.split("\n") })
+
+        val item = read("<ul><li><b>" + lines.joinToString("<br>") + "</b></li></ul>")
+        assertTrue(item.blocks.size > 3)
+        assertTrue(item.blocks.all { block -> block.style == BlockStyle.ListItem && block.spans.all { it.bold } })
+        assertEquals("•", item.blocks.first().marker)
+        item.blocks.drop(1).forEach { assertNull(it.marker) }
+        assertEquals(lines, item.blocks.flatMap { it.text.split("\n") })
+    }
+
+    @Test
+    fun manyUnclosedSkippedElementsDoNotHang() {
+        val start = System.nanoTime()
+        assertEquals("Text", read("<head>".repeat(1_000_000) + "<p>Text</p>").plainText)
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 3_000)
+        // Mehrere geschlossene übersprungene Elemente gleichen Namens.
+        assertEquals("a b c", read("<p>a <script>1</script>b <SCRIPT>2</script >c<style>x</style></p>").plainText)
     }
 }

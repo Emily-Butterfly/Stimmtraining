@@ -215,4 +215,14 @@ class OdtReaderTest {
         assertTrue(document.truncated)
         assertTrue(document.blocks.sumOf { it.text.length } <= 300)
     }
+
+    @Test
+    fun deeplyNestedElementsAreRejected() {
+        fun readNew(body: String) = DocumentText.read(TestDocuments.odt(folder.newFile(), body), DocumentKind.Odt)
+        val error = assertThrows(IOException::class.java) {
+            readNew("<text:p>" + "<text:span>".repeat(300) + "Tief" + "</text:span>".repeat(300) + "</text:p>")
+        }
+        assertEquals("Die Datei ist beschädigt oder kein gültiges OpenDocument-Dokument.", error.message)
+        assertEquals("Tief", readNew("<text:p>" + "<text:span>".repeat(100) + "Tief" + "</text:span>".repeat(100) + "</text:p>").plainText)
+    }
 }

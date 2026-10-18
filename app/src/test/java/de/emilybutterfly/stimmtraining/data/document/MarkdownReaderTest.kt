@@ -4,6 +4,7 @@ import android.app.Application
 import de.emilybutterfly.stimmtraining.data.document.TestDocuments.assertOutline
 import de.emilybutterfly.stimmtraining.data.document.TestDocuments.markup
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -227,5 +228,66 @@ class MarkdownReaderTest {
         val document = read((1..200).joinToString("\n\n") { "Absatz **$it** mit Text." }, maxChars = 200)
         assertTrue(document.truncated)
         assertTrue(document.blocks.sumOf { it.text.length } <= 200)
+    }
+
+    private val longLines = (1..200).map { "Zeile $it mit etwas Text, damit der Absatz lang wird." }
+
+    @Test
+    fun longParagraphsAndCodeBlocksAreSplitAtLineBreaks() {
+        val paragraph = read(longLines.joinToString("\n"))
+        assertTrue(paragraph.blocks.size > 3)
+        assertTrue(paragraph.blocks.all { it.style == BlockStyle.Paragraph && it.text.length <= TextDocumentBuilder.LONG_BLOCK_CHARS + 60 })
+        assertEquals(longLines, paragraph.blocks.flatMap { it.text.split("\n") })
+
+        // Hervorhebung über die Teilung hinweg bleibt erhalten.
+        val italic = read("*" + longLines.joinToString("\n") + "*")
+        assertTrue(italic.blocks.size > 3)
+        assertTrue(italic.blocks.all { block -> block.spans.all { it.italic } })
+
+        val code = read("```\n" + longLines.joinToString("\n") + "\n```\nDanach")
+        assertTrue(code.blocks.size > 4)
+        assertEquals(longLines, code.blocks.dropLast(1).flatMap { it.text.split("\n") })
+        assertEquals("Danach", code.blocks.last().text)
+
+        // Ein langer Listenpunkt: Das Aufzählungszeichen steht nur am ersten Teil.
+        val item = read("- " + longLines.joinToString("\n  "))
+        assertTrue(item.blocks.size > 3)
+        assertTrue(item.blocks.all { it.style == BlockStyle.ListItem })
+        assertEquals("•", item.blocks.first().marker)
+        item.blocks.drop(1).forEach { assertNull(it.marker) }
+        assertEquals(longLines, item.blocks.flatMap { it.text.split("\n") })
+    }
+
+    @Test
+    fun manyAngleBracketsAndBackticksDoNotHang() {
+        val paragraphs = listOf(
+            "<".repeat(300_000),
+            "<a".repeat(150_000),
+            "<!--".repeat(75_000),
+            "<a@b".repeat(75_000),
+            "\\``".repeat(100_000),
+        )
+        for (paragraph in paragraphs) {
+            val start = System.nanoTime()
+            val document = read(paragraph)
+            val millis = (System.nanoTime() - start) / 1_000_000
+            assertTrue("${paragraph.take(4)}: $millis ms", millis < 2_000)
+            assertTrue(paragraph.take(4), document.plainText.length > 100_000)
+        }
+        // Gekürzte Suche ändert nichts an kurzen Tags, Adressen und Kommentaren.
+        assertEquals("mail@example.org, https://example.org/a?b=c und Text", inline("<mail@example.org>, <https://example.org/a?b=c> <!-- weg -->und <em class=\"x\">Text</em>"))
+        assertEquals("Offen <!-- ohne Ende und <!-- noch einmal", inline("Offen <!-- ohne Ende und <!-- noch einmal"))
+    }
+
+    @Test
+    fun veryLongLinesDoNotOverflowOrHang() {
+        val start = System.nanoTime()
+        assertOutline(read("# Titel" + " ".repeat(100_000) + "Ende #"), "Heading1: Titel" + " ".repeat(100_000) + "Ende")
+        assertOutline(read("> ".repeat(100_000) + "Zitat"), "Quote: Zitat")
+        assertEquals(1, read("* ".repeat(100_000) + "x").blocks.size)
+        assertEquals(0, read("- ".repeat(100_000)).blocks.size)
+        assertTrue((System.nanoTime() - start) / 1_000_000 < 5_000)
+        // Schließende Rauten wie bisher: nur durch Leerraum abgetrennte fallen weg.
+        assertOutline(read("## Titel ##\n\n## Titel#\n\n# #"), "Heading2: Titel", "Heading2: Titel#", "Heading1: #")
     }
 }

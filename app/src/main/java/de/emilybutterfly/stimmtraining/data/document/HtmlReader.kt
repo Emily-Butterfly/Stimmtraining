@@ -54,6 +54,12 @@ internal object HtmlReader {
         /** Ab dieser Position gibt es kein schließendes '>' mehr; '<' ist dann normaler Text. */
         private var noTagEnd = Int.MAX_VALUE
 
+        /**
+         * Je übersprungenem Element (head, script …) die Position des nächsten "</name" ab der
+         * letzten Suche, -1 für „keins mehr“. Ohne das suchte jedes weitere `<head>` wieder bis zum Ende.
+         */
+        private val closingTags = HashMap<String, Int>()
+
         fun run() {
             var i = 0
             while (i < s.length && !builder.isFull) {
@@ -76,8 +82,7 @@ internal object HtmlReader {
             }
             if (pre > 0) {
                 if (c == '\n') {
-                    flushText()
-                    builder.lineBreak()
+                    lineBreak()
                 } else {
                     text.append(c)
                     if (!c.isWhitespace()) blockHasText = true
@@ -180,7 +185,7 @@ internal object HtmlReader {
                 return j
             }
             if (name in SKIPPED && !selfClosing) {
-                val end = s.indexOf("</$name", j, ignoreCase = true)
+                val end = closingTag(name, j)
                 return when {
                     end >= 0 -> s.indexOf('>', end).let { if (it < 0) s.length else it + 1 }
                     // Ein fehlendes </head> soll nicht den ganzen Text verschlucken.
@@ -190,6 +195,13 @@ internal object HtmlReader {
             }
             startTag(name, attributes, selfClosing)
             return j
+        }
+
+        /** Wie `s.indexOf("</$name", from, ignoreCase = true)`; [from] wächst von Aufruf zu Aufruf. */
+        private fun closingTag(name: String, from: Int): Int {
+            val known = closingTags[name]
+            if (known != null && (known < 0 || known >= from)) return known
+            return s.indexOf("</$name", from, ignoreCase = true).also { closingTags[name] = it }
         }
 
         private fun startTag(name: String, attributes: Map<String, String>?, selfClosing: Boolean) {
@@ -273,8 +285,10 @@ internal object HtmlReader {
             }
         }
 
+        /** Zeilenumbruch; ein langer Absatz endet stattdessen und es geht in einem gleichartigen weiter. */
         private fun lineBreak() {
             flushText()
+            if (builder.currentBlockLength > TextDocumentBuilder.LONG_BLOCK_CHARS) return boundary()
             builder.lineBreak()
             pendingSpace = false
             lineHasContent = false

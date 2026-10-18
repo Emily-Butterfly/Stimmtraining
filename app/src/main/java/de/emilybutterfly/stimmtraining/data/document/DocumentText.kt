@@ -42,6 +42,9 @@ object DocumentText {
             throw DocumentReadException(damaged(kind), e)
         } catch (e: RuntimeException) {
             throw DocumentReadException(damaged(kind), e)
+        } catch (e: OutOfMemoryError) {
+            // Letzte Sicherung, falls eine Datei trotz aller Grenzen zu viel Speicher braucht: Meldung statt Absturz.
+            throw DocumentReadException("Das Dokument ist zu groß, um es als Text anzuzeigen.", e)
         }
         val document = builder.build()
         return if (complete) document else document.copy(truncated = true)

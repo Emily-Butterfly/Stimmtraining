@@ -258,4 +258,26 @@ class DocxReaderTest {
         assertTrue(document.blocks[1].markup().contains("*als ein Wanderer*"))
         assertTrue(!document.truncated)
     }
+
+    @Test
+    fun deeplyNestedElementsAreRejected() {
+        val deep = "<w:customXml>".repeat(300) + p("Tief") + "</w:customXml>".repeat(300)
+        // Auch wenn das Element übersprungen wird (gelöschter Text).
+        val skipped = "<w:p><w:del>" + "<w:r>".repeat(300) + "</w:r>".repeat(300) + "</w:del></w:p>"
+        fun readNew(body: String) = DocumentText.read(TestDocuments.docx(folder.newFile(), body), DocumentKind.Docx)
+        for (body in listOf(deep, skipped)) {
+            val error = assertThrows(IOException::class.java) { readNew(body) }
+            assertEquals("Die Datei ist beschädigt oder kein gültiges Word-Dokument.", error.message)
+        }
+        assertEquals("Tief", readNew("<w:customXml>".repeat(100) + p("Tief") + "</w:customXml>".repeat(100)).plainText)
+    }
+
+    @Test
+    fun hugeTextNodeIsStoppedByTheSizeLimit() {
+        // Ein einziger riesiger Textknoten: komprimiert winzig, der XML-Parser puffert ihn am Stück.
+        val file = TestDocuments.docx(folder.newFile("text.docx"), "<w:p><w:r><w:t>" + "a".repeat(2_000_000) + "</w:t></w:r></w:p>")
+        assertTrue(file.length() < 100_000)
+        val error = assertThrows(IOException::class.java) { DocxReader.read(file, TextDocumentBuilder(), maxBytes = 1_000_000) }
+        assertTrue(error.message!!, error.message!!.contains("zu groß"))
+    }
 }

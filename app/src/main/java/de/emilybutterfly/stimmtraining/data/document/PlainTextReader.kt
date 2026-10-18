@@ -15,7 +15,10 @@ internal object PlainTextReader {
                 open = false
                 continue
             }
-            if (open) builder.lineBreak()
+            if (open) {
+                // Text ohne Leerzeilen (ein Absatz je Zeile) nicht zu einem Riesenabsatz machen.
+                if (builder.currentBlockLength > TextDocumentBuilder.LONG_BLOCK_CHARS) builder.endBlock() else builder.lineBreak()
+            }
             builder.append(content)
             open = true
         }
