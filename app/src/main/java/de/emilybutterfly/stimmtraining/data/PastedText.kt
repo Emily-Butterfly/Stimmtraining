@@ -27,10 +27,14 @@ object PastedText {
     fun createDraft(files: FileStore, text: String): File {
         val file = files.newDraftFile("txt")
         try {
-            file.writeText(text.take(MAX_CHARS))
+            file.writeText(text.takeWhole(MAX_CHARS))
         } catch (e: IOException) {
             file.delete()
-            throw DocumentReadException("Der Text konnte nicht gespeichert werden – ist der Speicher voll?", e)
+            throw DocumentReadException(
+                "Der Text konnte nicht gespeichert werden – ist der Speicher voll? Er ist nicht verloren: " +
+                    "Tippe nach dem Aufräumen erneut auf „Einfügen“ oder „Bearbeiten“.",
+                e,
+            )
         }
         return file
     }
@@ -51,4 +55,10 @@ object PastedText {
         }
         return text.removePrefix("﻿").takeIf { it.length <= MAX_CHARS }
     }
+}
+
+/** Die ersten [count] Zeichen, ohne ein Emoji (Ersatzzeichenpaar) zu halbieren. */
+fun String.takeWhole(count: Int): String {
+    val part = take(count)
+    return if (part.isNotEmpty() && part.last().isHighSurrogate()) part.dropLast(1) else part
 }

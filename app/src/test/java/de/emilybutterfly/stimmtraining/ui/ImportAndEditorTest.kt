@@ -4,6 +4,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import de.emilybutterfly.stimmtraining.data.document.DocumentReadException
 import de.emilybutterfly.stimmtraining.data.document.UnsupportedDocumentException
+import de.emilybutterfly.stimmtraining.data.takeWhole
 import de.emilybutterfly.stimmtraining.ui.components.limitedEdit
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -37,6 +38,15 @@ class ImportAndEditorTest {
         val limited = limitedEdit(old, new, max = 13)
         assertEquals("Anfang12 Ende", limited.text)
         assertEquals(TextRange(8), limited.selection)
+    }
+
+    @Test
+    fun anEmojiIsNeverCutInHalf() {
+        val old = TextFieldValue("abc", TextRange(3))
+        val withEmoji = TextFieldValue("abc\uD83D\uDE00", TextRange(5)) // 😀 = zwei Zeichen
+        assertEquals(old, limitedEdit(old, withEmoji, max = 4))
+        assertEquals("ab", "ab\uD83D\uDE00".takeWhole(3))
+        assertEquals("ab\uD83D\uDE00", "ab\uD83D\uDE00".takeWhole(4))
     }
 
     @Test

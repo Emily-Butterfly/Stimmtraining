@@ -426,7 +426,8 @@
           "checksGentle": [
             "Du sprichst ganz normal, ohne schon zu üben.",
             "Du nimmst unter ähnlichen Bedingungen auf, etwa gleich laut und zur gleichen Tageszeit."
-          ]
+          ],
+          "goalGentle": "Eine ruhige Aufnahme deiner Stimme festhalten – ganz ohne Bewertung."
         },
         {
           "id": "tonhoehe-zielton",
@@ -490,7 +491,7 @@
             "Steigere dich Stufe für Stufe: Silbe, Wort, kurze Phrase, ganzer Satz.",
             "Lies zwei, drei Sätze. Die Melodie darf auf und ab gehen und um deinen Zielbereich kreisen, nicht an einem Ton kleben.",
             "Achte darauf, ob deine Stimme am Satzende absackt. Nimm erst danach hier auf.",
-            "Nimm den Nordwind-Satz auf und vergleiche ihn mit deiner Ausgangsaufnahme."
+            "Nimm den Nordwind-Satz auf."
           ]
         }
       ],
@@ -602,6 +603,19 @@
             "„oh“ und „uh“ klingen heller, sind aber noch gut verständlich.",
             "Der Kiefer bleibt locker, du presst die Zunge nicht nach oben.",
             "In der Aufnahme klingt die zweite Version heller und näher."
+          ],
+          "stepsGentle": [
+            "Sprich ein langes „iiih“. Spür, wie die Zunge hoch und vorn liegt und ihre Ränder die oberen Backenzähne berühren.",
+            "Lächle ganz leicht und hör auf den hellen Klang.",
+            "Gleite vom „ih“ durch die Vokale: „ih – eh – äh – ah – oh – uh“. Nimm die Helligkeit vom „ih“ mit.",
+            "Sprich Wörter mit vielen i-Lauten, dann Wörter mit dunklen Vokalen.",
+            "Lies die Sätze und denk dabei an das „ih“ im Hintergrund.",
+            "Nimm den Satz mit dunklen Vokalen nach der Übung auf."
+          ],
+          "checksGentle": [
+            "„oh“ und „uh“ klingen heller, sind aber noch gut verständlich.",
+            "Der Kiefer bleibt locker, du presst die Zunge nicht nach oben.",
+            "In der Aufnahme klingt der Satz hell und nah."
           ]
         },
         {

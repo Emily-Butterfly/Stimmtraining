@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import de.emilybutterfly.stimmtraining.data.PastedText
+import de.emilybutterfly.stimmtraining.data.takeWhole
 import java.util.Locale
 
 /**
@@ -76,32 +77,32 @@ fun TextEditorDialog(
             val start = minOf(value.selection.start, value.selection.end)
             val end = maxOf(value.selection.start, value.selection.end)
             val room = PastedText.MAX_CHARS - (value.text.length - (end - start))
-            val inserted = clip.take(room.coerceAtLeast(0))
+            val inserted = clip.takeWhole(room.coerceAtLeast(0))
             if (inserted.length < clip.length) tooLong()
             onValueChange(TextFieldValue(value.text.replaceRange(start, end, inserted), TextRange(start + inserted.length)))
         }
     }
     val requestDismiss = { if (changed) confirmDiscard = true else onDismiss() }
 
-    if (confirmDiscard) {
-        AlertDialog(
-            onDismissRequest = { confirmDiscard = false },
-            title = { Text("Text verwerfen?") },
-            text = { Text("Was du eingefügt oder geändert hast, geht verloren.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDiscard = false
-                    onDismiss()
-                }) { Text("Verwerfen") }
-            },
-            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Weiter bearbeiten") } },
-        )
-    }
-
     Dialog(
         onDismissRequest = requestDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, decorFitsSystemWindows = false),
     ) {
+        // Innerhalb des Editor-Fensters: So liegt die Rückfrage immer darüber, auch nach dem Drehen.
+        if (confirmDiscard) {
+            AlertDialog(
+                onDismissRequest = { confirmDiscard = false },
+                title = { Text("Text verwerfen?") },
+                text = { Text("Was du eingefügt oder geändert hast, geht verloren.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmDiscard = false
+                        onDismiss()
+                    }) { Text("Verwerfen") }
+                },
+                dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Weiter bearbeiten") } },
+            )
+        }
         Surface(Modifier.fillMaxSize()) {
             // safeDrawing enthält die Tastatur: das Textfeld wird kleiner statt verdeckt.
             Column(Modifier.safeDrawingPadding()) {
@@ -140,5 +141,9 @@ internal fun limitedEdit(old: TextFieldValue, new: TextFieldValue, max: Int): Te
     if (overflow <= 0) return new
     val cut = new.selection.start
     val inserted = new.text.length > old.text.length && new.selection.collapsed && cut >= overflow
-    return if (inserted) TextFieldValue(new.text.removeRange(cut - overflow, cut), TextRange(cut - overflow)) else old
+    if (!inserted) return old
+    var from = cut - overflow
+    // Ein Emoji besteht aus zwei Zeichen; nie nur eine Hälfte stehen lassen.
+    if (from > 0 && new.text[from - 1].isHighSurrogate()) from--
+    return TextFieldValue(new.text.removeRange(from, cut), TextRange(from))
 }

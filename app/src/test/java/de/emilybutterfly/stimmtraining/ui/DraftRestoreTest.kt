@@ -251,6 +251,31 @@ class DraftRestoreTest {
     }
 
     @Test
+    fun exerciseGuideFollowsGentleModeWhileOnTheRecordScreen() {
+        val handle = SavedStateHandle(
+            mapOf(RecordViewModel.ARG_TECHNIQUE to "tonhoehe", RecordViewModel.ARG_EXERCISE to "tonhoehe-ausgangslage"),
+        )
+        val viewModel = RecordViewModel(app, app.container, handle)
+        fun waitFor(condition: () -> Boolean) {
+            val deadline = System.currentTimeMillis() + 5_000
+            while (!condition() && System.currentTimeMillis() < deadline) {
+                shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        waitFor { viewModel.guide.value != null }
+        val label = viewModel.state.value.params.exercise
+        assertTrue(viewModel.guide.value!!.exercise.steps.any { "Tonhöhen-App" in it })
+
+        app.container.settings.setGentleMode(true)
+        waitFor { viewModel.guide.value!!.exercise.steps.none { "Tonhöhen-App" in it } }
+        assertTrue("sanfte Fassung", viewModel.guide.value!!.exercise.steps.none { "Tonhöhen-App" in it || "Hz" in it })
+        assertEquals("Übung im Formular bleibt", label, viewModel.state.value.params.exercise)
+        app.container.settings.setGentleMode(false)
+    }
+
+    @Test
     fun missingDraftFilesAreIgnored() {
         val handle = SavedStateHandle()
         handle[RecordViewModel.KEY_AUDIO] = "/nicht/vorhanden.m4a"

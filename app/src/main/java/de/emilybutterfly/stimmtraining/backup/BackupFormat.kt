@@ -127,6 +127,8 @@ object BackupFormat {
         val notes = listOf("mostFrequent", "lowest", "highest").map { pitch.intOrNull(it) }
         if (notes.any { it != null && it !in 0..127 }) return this
         if (notes.any { it == null } && notes.any { it != null }) return this
+        // Reihenfolge tiefste ≤ häufigste ≤ höchste muss stimmen.
+        if (notes[0] != null && !(notes[1]!! <= notes[0]!! && notes[0]!! <= notes[2]!!)) return this
         return copy(pitchMostFrequent = notes[0], pitchLowest = notes[1], pitchHighest = notes[2], pitchVoicedMs = voicedMs)
     }
 

@@ -36,6 +36,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -124,6 +125,10 @@ class RecordViewModel(
             _state.map(::persistable).distinctUntilChanged().collect(::persist)
         }
         loadGuide()
+        // Wer die Tonhöhe ausblendet, soll auch keine laufende Analyse mehr spüren (Meldungen, Warten beim Speichern).
+        viewModelScope.launch {
+            container.settings.gentleMode.collect { gentle -> if (gentle) pitchJob?.cancel() }
+        }
     }
 
     /** Lädt die Übung, mit der die Aufnahme gestartet wurde, und trägt sie ins Formular ein. */
@@ -131,26 +136,31 @@ class RecordViewModel(
         val techniqueId = savedState.get<String>(ARG_TECHNIQUE) ?: return
         val exerciseId = savedState.get<String>(ARG_EXERCISE)
         viewModelScope.launch {
-            val gentle = container.settings.gentleMode.value
-            val technique = withContext(Dispatchers.IO) { runCatching { container.techniques(gentle) }.getOrNull() }
-                ?.technique(techniqueId)
-            val exercise = exerciseId?.let { technique?.exercise(it) }
-            if (technique == null || exercise == null) {
+            var first = true
+            // Die Anleitung folgt dem sanften Modus, auch wenn er während der Aufnahme umgeschaltet wird.
+            container.settings.gentleMode.collectLatest { gentle ->
+                val technique = withContext(Dispatchers.IO) { runCatching { container.techniques(gentle) }.getOrNull() }
+                    ?.technique(techniqueId)
+                val exercise = exerciseId?.let { technique?.exercise(it) }
+                if (technique == null || exercise == null) {
+                    _guideReady.value = true
+                    return@collectLatest
+                }
+                val guide = ExerciseGuide(technique.recordingLabel(exercise), exercise)
+                _guide.value = guide
                 _guideReady.value = true
-                return@launch
-            }
-            val guide = ExerciseGuide(technique.recordingLabel(exercise), exercise)
-            _guide.value = guide
-            _guideReady.value = true
-            if (!hadSavedParams) {
-                _state.update {
-                    if (it.params.exercise.isNotBlank()) {
-                        it
-                    } else {
-                        val params = it.params.copy(exercise = guide.label)
-                        it.copy(params = params, initialParams = params)
+                // Titel und Bezeichnung sind in beiden Fassungen gleich; eingetragen wird nur einmal.
+                if (first && !hadSavedParams) {
+                    _state.update {
+                        if (it.params.exercise.isNotBlank()) {
+                            it
+                        } else {
+                            val params = it.params.copy(exercise = guide.label)
+                            it.copy(params = params, initialParams = params)
+                        }
                     }
                 }
+                first = false
             }
         }
     }
@@ -419,7 +429,7 @@ class RecordViewModel(
     fun analyzePitch() {
         val current = _state.value
         val audio = current.audio ?: return
-        if (current.phase != RecorderPhase.Done || pitchJob?.isActive == true) return
+        if (current.phase != RecorderPhase.Done || current.saving || pitchJob?.isActive == true) return
         _state.update { it.copy(pitchProgress = 0f) }
         pitchJob = viewModelScope.launch {
             try {
@@ -430,7 +440,9 @@ class RecordViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(message = "Die Tonhöhe ließ sich nicht analysieren: ${e.message}") }
+                if (!container.settings.gentleMode.value) {
+                    _state.update { it.copy(message = "Die Tonhöhe ließ sich nicht analysieren: ${e.message}") }
+                }
             } finally {
                 _state.update { it.copy(pitchProgress = null) }
             }
@@ -476,15 +488,20 @@ class RecordViewModel(
             try {
                 // Eine laufende Analyse dauert nur Sekunden; ihr Ergebnis wird mitgespeichert.
                 pitchJob?.join()
-                val pitch = _state.value.pitch?.takeIf { _state.value.audio == audio }
+                // Danach neu lesen: Während des Wartens kann sich das Formular noch geändert haben.
+                val now = _state.value
+                if (now.audio != audio || now.attachmentBusy) {
+                    _state.update { it.copy(saving = false) }
+                    return@launch
+                }
                 val id = withContext(NonCancellable) {
                     container.repository.create(
                         draftAudio = audio,
-                        draftAttachment = current.attachment,
-                        recordedAt = current.recordedAt ?: System.currentTimeMillis(),
-                        durationMs = current.durationMs,
-                        params = current.params,
-                        pitch = pitch,
+                        draftAttachment = now.attachment,
+                        recordedAt = now.recordedAt ?: System.currentTimeMillis(),
+                        durationMs = now.durationMs,
+                        params = now.params,
+                        pitch = now.pitch,
                     )
                 }
                 onSaved(id)

@@ -75,7 +75,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,6 +103,7 @@ import de.emilybutterfly.stimmtraining.ui.components.TextAttachmentSection
 import de.emilybutterfly.stimmtraining.ui.components.formatBytes
 import de.emilybutterfly.stimmtraining.ui.components.formatDateTime
 import de.emilybutterfly.stimmtraining.ui.components.formatDuration
+import de.emilybutterfly.stimmtraining.ui.components.rememberDocumentContent
 import de.emilybutterfly.stimmtraining.ui.components.rememberReaderSettings
 import de.emilybutterfly.stimmtraining.ui.techniques.ExerciseDetails
 
@@ -126,6 +129,11 @@ fun RecordScreen(
     // das Formular behält seine Scrollposition, während der Lesemodus offen ist.
     val documentListState = rememberSaveable(state.attachment?.file, saver = LazyListState.Saver) { LazyListState() }
     val formScroll = rememberScrollState()
+    // Das Formular behält beim Wechsel in den Lesemodus seinen ganzen Zustand (z. B. eingeklappte Anleitung).
+    val formState = rememberSaveableStateHolder()
+    // Einmal geladen, für Karte und Lesemodus: kein erneutes Laden und kein Springen beim Umschalten.
+    val attachedDocument = state.attachment as? TextAttachment.Document
+    val documentContent = attachedDocument?.let { document -> key(document.file) { rememberDocumentContent(document).value } }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.startRecording() else permissionDenied = true
@@ -215,40 +223,44 @@ fun RecordScreen(
                 reader,
                 Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
                 documentListState = documentListState,
+                documentContent = documentContent,
             )
             return@Scaffold
         }
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .consumeWindowInsets(padding)
-                .imePadding()
-                .verticalScroll(formScroll)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            if (state.phase == RecorderPhase.Done) {
-                PitchCard(result = state.pitch, progress = state.pitchProgress, onAnalyze = viewModel::analyzePitch)
+        formState.SaveableStateProvider("form") {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .consumeWindowInsets(padding)
+                    .imePadding()
+                    .verticalScroll(formScroll)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                if (state.phase == RecorderPhase.Done) {
+                    PitchCard(result = state.pitch, progress = state.pitchProgress, onAnalyze = viewModel::analyzePitch)
+                }
+                guide?.let { GuideCard(it) }
+                TextAttachmentSection(
+                    attachment = attachment,
+                    busy = state.attachmentBusy,
+                    reader = reader,
+                    cameraTarget = viewModel::cameraTarget,
+                    onCameraResult = viewModel::onCameraPhoto,
+                    onPhotoPicked = viewModel::onPhotoPicked,
+                    onDocumentPicked = viewModel::onDocumentPicked,
+                    onTextPasted = viewModel::onTextPasted,
+                    onRemove = viewModel::removeAttachment,
+                    onExpand = { readingMode = true },
+                    documentListState = documentListState,
+                    documentContent = documentContent,
+                    onOpenExternally = { document -> viewModel.openExternally(document) { context.startActivity(it) } },
+                    // Kamera, Galerie oder Dateiauswahl würden die App in den Hintergrund schicken und die Aufnahme beenden.
+                    enabled = !state.isRecording && !state.saving,
+                )
+                ParameterForm(params = state.params, onChange = viewModel::updateParams)
             }
-            guide?.let { GuideCard(it) }
-            TextAttachmentSection(
-                attachment = attachment,
-                busy = state.attachmentBusy,
-                reader = reader,
-                cameraTarget = viewModel::cameraTarget,
-                onCameraResult = viewModel::onCameraPhoto,
-                onPhotoPicked = viewModel::onPhotoPicked,
-                onDocumentPicked = viewModel::onDocumentPicked,
-                onTextPasted = viewModel::onTextPasted,
-                onRemove = viewModel::removeAttachment,
-                onExpand = { readingMode = true },
-                documentListState = documentListState,
-                onOpenExternally = { document -> viewModel.openExternally(document) { context.startActivity(it) } },
-                // Kamera, Galerie oder Dateiauswahl würden die App in den Hintergrund schicken und die Aufnahme beenden.
-                enabled = !state.isRecording,
-            )
-            ParameterForm(params = state.params, onChange = viewModel::updateParams)
         }
     }
 

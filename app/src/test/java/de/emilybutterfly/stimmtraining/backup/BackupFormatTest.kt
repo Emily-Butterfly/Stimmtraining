@@ -87,12 +87,14 @@ class BackupFormatTest {
         val list = json.getJSONArray("recordings")
         list.put(JSONObject(list.getJSONObject(0).toString()).put("pitch", JSONObject().put("mostFrequent", 500).put("lowest", 1).put("highest", 2).put("voicedMs", 10)))
         list.put(JSONObject(list.getJSONObject(0).toString()).put("pitch", JSONObject().put("mostFrequent", 57).put("voicedMs", 10)))
+        list.put(JSONObject(list.getJSONObject(0).toString()).put("pitch", JSONObject().put("mostFrequent", 57).put("lowest", 60).put("highest", 62).put("voicedMs", 10)))
         val parsed = BackupFormat.parse(json.toString()).map { it.recording }
         assertEquals(analysed.copy(id = 0), parsed[0])
         assertEquals(noVoice.copy(id = 0), parsed[1])
         assertNull(parsed[2].pitchVoicedMs)
         assertNull("unplausible Note", parsed[3].pitchVoicedMs)
         assertNull("unvollständig", parsed[4].pitchVoicedMs)
+        assertNull("tiefste über häufigster Note", parsed[5].pitchVoicedMs)
     }
 
     @Test

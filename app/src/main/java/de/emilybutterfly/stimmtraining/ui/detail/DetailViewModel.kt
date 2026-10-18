@@ -78,6 +78,10 @@ class DetailViewModel(
         viewModelScope.launch {
             _edit.map { it?.copy(attachmentBusy = false, saving = false) }.distinctUntilChanged().collect(::persistEdit)
         }
+        // Im sanften Modus läuft keine Tonhöhen-Analyse weiter.
+        viewModelScope.launch {
+            container.settings.gentleMode.collect { gentle -> if (gentle) pitchJob?.cancel() }
+        }
     }
 
     private fun persistEdit(edit: EditState?) {
@@ -225,7 +229,9 @@ class DetailViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _message.value = "Die Tonhöhe ließ sich nicht analysieren: ${e.message}"
+                if (!container.settings.gentleMode.value) {
+                    _message.value = "Die Tonhöhe ließ sich nicht analysieren: ${e.message}"
+                }
             } finally {
                 _pitchProgress.value = null
             }

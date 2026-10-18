@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.emilybutterfly.stimmtraining.data.Source
 import de.emilybutterfly.stimmtraining.data.Technique
+import de.emilybutterfly.stimmtraining.ui.gentleMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +54,7 @@ fun TechniquesScreen(
 ) {
     val content by viewModel.content.collectAsStateWithLifecycle()
     val layoutDirection = LocalLayoutDirection.current
+    val gentle = gentleMode()
 
     Scaffold(
         topBar = {
@@ -84,8 +86,13 @@ fun TechniquesScreen(
         ) {
             item(key = "intro") {
                 Text(
-                    "Bausteine für eine feminine Stimme – mit Erklärungen, Beispielen und Übungen. " +
-                        "Jede Übung kannst du direkt aufnehmen und so deine Fortschritte vergleichen.",
+                    if (gentle) {
+                        "Bausteine für deine Stimme – mit Erklärungen, Beispielen und Übungen. " +
+                            "Jede Übung kannst du direkt aufnehmen."
+                    } else {
+                        "Bausteine für eine feminine Stimme – mit Erklärungen, Beispielen und Übungen. " +
+                            "Jede Übung kannst du direkt aufnehmen und so deine Fortschritte vergleichen."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }

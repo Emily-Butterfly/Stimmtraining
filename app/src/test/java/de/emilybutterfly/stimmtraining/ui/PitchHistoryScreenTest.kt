@@ -95,6 +95,16 @@ class PitchHistoryScreenTest {
     }
 
     @Test
+    fun hugeRangesFromDamagedBackupsDoNotCrashTheChart() {
+        runBlocking {
+            val audio = app.container.files.newDraftFile("m4a").apply { writeBytes(ByteArray(10)) }
+            val id = app.container.repository.create(audio, null, now, 60_000, RecordingParams(exercise = "Text lesen"))
+            app.container.repository.savePitch(id, PitchResult(50, 10, 110, 20_000))
+        }
+        show()
+    }
+
+    @Test
     fun emptyStateExplainsHowToGetData() {
         show(waitFor = "Noch keine analysierten Aufnahmen")
     }

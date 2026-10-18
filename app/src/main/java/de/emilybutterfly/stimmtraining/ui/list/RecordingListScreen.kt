@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.calculateEndPadding
@@ -242,11 +243,12 @@ private fun RecordingCard(recording: Recording, attachment: TextAttachment?, onC
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Bricht in eine zweite Zeile um, statt Sterne oder Noten auf schmalen Handys zu quetschen.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     WarmUpBadge(recording.warmedUp)
                     val most = recording.pitchMostFrequent
                     if (most != null && !gentleMode()) NoteBadge(recording.pitchLowest ?: most, most, recording.pitchHighest ?: most)
-                    recording.selfRating?.let { RatingDisplay(it, iconSize = 14.dp) }
+                    recording.selfRating?.let { RatingDisplay(it, iconSize = 14.dp, modifier = Modifier.align(Alignment.CenterVertically)) }
                 }
             }
         }
@@ -291,7 +293,13 @@ private fun NoteBadge(lowest: Int, mostFrequent: Int, highest: Int) {
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Icon(Icons.Filled.MusicNote, contentDescription = null, modifier = Modifier.size(14.dp))
-            Text(noteRange(lowest, mostFrequent, highest), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            Text(
+                noteRange(lowest, mostFrequent, highest),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

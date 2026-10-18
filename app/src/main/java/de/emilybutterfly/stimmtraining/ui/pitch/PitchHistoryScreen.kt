@@ -254,10 +254,16 @@ private fun PitchChart(points: List<PitchPoint>, selected: Int, onSelect: (Int) 
     val currentOnSelect by rememberUpdatedState(onSelect)
 
     val summary = remember(points) {
-        val first = points.first()
-        val last = points.last()
-        "Diagramm mit ${points.size} Aufnahmen vom ${SHORT_DATE.format(first.recordedAt.zoned())} bis " +
-            "${SHORT_DATE.format(last.recordedAt.zoned())}. Zuletzt häufigste Note ${Notes.name(last.mostFrequent)}. " +
+        val first = points.first().recordedAt.zoned()
+        val last = points.last().recordedAt.zoned()
+        val format = if (first.year == last.year) SHORT_DATE else SHORT_DATE_YEAR
+        val count = if (points.size == 1) "1 Aufnahme" else "${points.size} Aufnahmen"
+        val period = if (first.toLocalDate() == last.toLocalDate()) {
+            "am ${format.format(first)}"
+        } else {
+            "vom ${format.format(first)} bis ${format.format(last)}"
+        }
+        "Diagramm mit $count $period. Zuletzt häufigste Note ${Notes.name(points.last().mostFrequent)}. " +
             "Insgesamt von ${Notes.name(points.minOf { it.lowest })} bis ${Notes.name(points.maxOf { it.highest })}."
     }
 
@@ -323,7 +329,8 @@ private class NoteScale(val low: Int, val high: Int, val ticks: List<Int>) {
                 low -= extra / 2
                 high += extra - extra / 2
             }
-            val step = listOf(1, 2, 3, 4, 6, 12).first { (high - low) / it <= 6 }
+            // Sehr große Bereiche (nur aus beschädigten Sicherungen möglich) bekommen Oktavschritte.
+            val step = listOf(1, 2, 3, 4, 6, 12).firstOrNull { (high - low) / it <= 6 } ?: (12 * ((high - low) / 72 + 1))
             return NoteScale(low, high, (low..high).filter { Math.floorMod(it, step) == 0 })
         }
     }
@@ -362,16 +369,22 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDateLabels(
     left: Float,
     top: Float,
 ) {
-    var lastEnd = Float.NEGATIVE_INFINITY
-    for ((label, layout) in labels) {
+    val gap = 8.dp.toPx()
+    val placed = labels.map { (label, layout) ->
         val index = label.first
         val width = layout.size.width.toFloat()
         val anchor = if (index < 0) (xs.first() + xs.last()) / 2f else xs[index]
         // Mittig unter dem Punkt, aber nie über den Rand hinaus.
         val x = (anchor - width / 2f).coerceIn(left, (size.width - width).coerceAtLeast(left))
-        if (x < lastEnd + 8.dp.toPx()) continue
-        drawText(layout, topLeft = Offset(x, top))
-        lastEnd = x + width
+        Triple(x, x + width, layout)
+    }
+    // Erstes und letztes Datum haben Vorrang; das mittlere nur, wenn es keines davon berührt.
+    val drawn = mutableListOf<Pair<Float, Float>>()
+    val order = if (placed.size == 3) listOf(placed[0], placed[2], placed[1]) else placed
+    for ((start, end, layout) in order) {
+        if (drawn.any { (s, e) -> start < e + gap && end + gap > s }) continue
+        drawText(layout, topLeft = Offset(start, top))
+        drawn += start to end
     }
 }
 
