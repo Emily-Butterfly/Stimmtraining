@@ -16,8 +16,12 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
   - Zufriedenheit mit der Aufnahme (1–5)
   - Titel/Text und Notizen
 - **Text zum Lesen**, wahlweise
-  - als **Foto**: mit der Kamera aufnehmen oder aus der Galerie wählen. Fotos werden
-    automatisch richtig gedreht und verkleinert.
+  - als **Fotos**: mit der Kamera aufnehmen oder aus der Galerie wählen, bis zu 30 Seiten.
+    Nach jedem Kamerafoto fragt die App „Nächste Seite / Fertig“; mit „+ Seite“ kommen später
+    weitere dazu, in der Galerie lassen sich mehrere Bilder auf einmal wählen. Fotos werden
+    automatisch richtig gedreht und verkleinert; in der Seitenübersicht lässt sich jede Seite
+    in 90°-Schritten drehen, verschieben oder löschen – auch später beim Bearbeiten. Beim Lesen
+    wischt man seitwärts von Seite zu Seite.
   - als **Datei**: PDF, Word (.docx), OpenDocument (.odt), RTF, HTML, Markdown (.md) oder
     Text (.txt), bis 50 MB. Das Format erkennt die App am Inhalt. Alte Word-Dateien (.doc)
     gehen nicht – in Word oder LibreOffice als .docx oder PDF speichern.
@@ -28,6 +32,20 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
   oder zwei Fingern einstellen; die Schriftgröße merkt sich die App. Der **Lesemodus** zeigt
   den Text auf dem ganzen Bildschirm, die Aufnahme-Knöpfe bleiben sichtbar. Dateien lassen
   sich außerdem in einer anderen App öffnen.
+- **Bibliothek** (Symbol in der Übersicht): Texte, die du lesen möchtest – fotografiert, als
+  Datei oder eingefügt. Bereiche „Zu lesen“ und „Gelesen“, Suche über Titel und Text, eigene
+  Schlagworte zum Filtern, Anheften. Beim Aufnehmen wählst du einen Text mit „Aus Bibliothek“;
+  ein direkt angehängter Text lässt sich mit „In Bibliothek übernehmen“ dorthin legen.
+  - **Lesefortschritt**: Bei langen Texten tippst du nach dem Lesen (oder schon währenddessen)
+    auf den letzten gelesenen Satz bzw. bei Fotos und PDFs auf die Zeile, bis zu der du
+    gekommen bist. „Wie weit hast du gelesen?“ fragt nach dem Stoppen, „Bis zum Ende“ ist
+    vorausgewählt. Das nächste Mal zeigt die App nur den Rest, darüber blass den zuletzt
+    gelesenen Satz. Zu Ende gelesene Texte wandern nach „Gelesen“; „Nochmal lesen“ holt sie
+    zurück. Die Stelle lässt sich in der Bibliothek ändern oder auf den Anfang setzen.
+  - Jede Aufnahme behält **nur den gelesenen Abschnitt** (Fotos und PDF-Seiten mit Anfangs- und
+    Endlinie) – auch wenn der Text später aus der Bibliothek gelöscht wird.
+  - Bearbeitest du einen angefangenen Text, bleibt die Stelle beim selben Satz; gibt es ihn
+    nicht mehr, beginnt der Text von vorne und die App sagt es dir.
 - **Tonhöhen-Analyse**: ermittelt für eine Aufnahme die häufigste, die tiefste und die
   höchste Note der Sprechstimme (z. B. A3 = 220 Hz; das mittlere C heißt C4, B ist das
   deutsche H). Kurze Ausreißer zählen nicht. Per Knopf gleich nach der Aufnahme (vor dem
@@ -48,9 +66,11 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
   knapp, endet sie rechtzeitig und bleibt abspielbar. Eine Minute Aufnahme braucht knapp 1 MB.
 - **Übersicht** aller Aufnahmen nach Tagen, mit Detailansicht, Bearbeiten, Teilen und Löschen.
 - **Backups**:
-  - *Backup erstellen*: alle Aufnahmen, Fotos, Dateien und Angaben als ZIP-Datei an einem Ort
-    deiner Wahl speichern (z. B. Google Drive, Downloads, USB-Stick).
-  - *Backup wiederherstellen*: ergänzt nur fehlende Aufnahmen, überschreibt oder löscht nichts.
+  - *Backup erstellen*: alle Aufnahmen, Fotos, Dateien und Angaben samt Bibliothek
+    (mit Schlagworten und Lesefortschritt) als ZIP-Datei an einem Ort deiner Wahl speichern
+    (z. B. Google Drive, Downloads, USB-Stick).
+  - *Backup wiederherstellen*: ergänzt nur fehlende Aufnahmen und Texte, überschreibt oder
+    löscht nichts.
     Damit klappt auch der Umzug auf ein neues Handy.
   - *Automatisches Backup*: täglich oder wöchentlich in einen gewählten Ordner, nur wenn sich
     etwas geändert hat. Die letzten 5 automatischen Sicherungen
@@ -108,8 +128,10 @@ vorher in der App ein Backup erstellen, danach wiederherstellen.
 - `minSdk` 26 (Android 8.0), `targetSdk` 36
 - Bauen und testen: `./gradlew testDebugUnitTest assembleDebug`
 - Die Tests (Robolectric) prüfen u. a. ein vollständiges Backup → neues Gerät → Wiederherstellen
-  mit echter Datenbank, das Datenbank-Update von Version 1 auf 2, den Foto-Import (Drehung,
-  Verkleinerung), Erkennen und Lesen aller Dateiformate, dass ein fehlgeschlagenes Speichern
+  mit echter Datenbank (auch mit Bibliothek), die Datenbank-Updates bis Version 3, den
+  Foto-Import (Drehung, Verkleinerung), Erkennen und Lesen aller Dateiformate, deutsche
+  Satzgrenzen, das Weiterlesen eines Texts über mehrere Aufnahmen, die Markdown-Ausgabe
+  gelesener Abschnitte (Hin und zurück ohne Verlust), dass ein fehlgeschlagenes Speichern
   nichts verliert, dass ein Entwurf das Beenden der App übersteht, die Speicherplatz-Warnung,
   die Rotation der automatischen Backups, und sie öffnen jede Ansicht der App einmal.
 - Änderungen an der Datenbank brauchen eine neue Version mit Migration in `AppDatabase`; das
@@ -121,11 +143,13 @@ vorher in der App ein Backup erstellen, danach wiederherstellen.
 app/src/main/java/de/emilybutterfly/stimmtraining/
   data/      Room-Datenbank, Dateiablage, Foto-Import
   data/document/  Dateien als Text: Formate erkennen, Text lesen, PDF-Seiten rendern
+  data/library/   Bibliothek: Texte, Lesefortschritt, Satzgrenzen, gelesene Abschnitte
   analysis/  Tonhöhen-Analyse: Audio dekodieren, Grundfrequenz bestimmen, Noten zählen
   audio/     Aufnahme (MediaRecorder)
   backup/    ZIP-Format, Export/Import, automatisches Backup
-  ui/        Compose-Ansichten: Liste, Aufnahme, Detail, Backup
+  ui/        Compose-Ansichten: Liste, Aufnahme, Detail, Bibliothek, Backup
 ```
 
-Format der Sicherung: `manifest.json` (alle Aufnahmen mit Parametern), `audio/…`, `photos/…`,
-`documents/…` (seit Format-Version 2; ältere Sicherungen lassen sich weiterhin einspielen).
+Format der Sicherung: `manifest.json` (alle Aufnahmen mit Parametern, seit Format-Version 3
+auch die Bibliothek), `audio/…`, `photos/…`, `documents/…` (seit Version 2), `library/…`
+(seit Version 3). Ältere Sicherungen lassen sich weiterhin einspielen.

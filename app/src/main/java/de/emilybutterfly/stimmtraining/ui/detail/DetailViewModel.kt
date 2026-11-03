@@ -15,7 +15,9 @@ import de.emilybutterfly.stimmtraining.data.AttachmentChange
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import de.emilybutterfly.stimmtraining.data.pageNames
+import de.emilybutterfly.stimmtraining.ui.requireSpaceFor
 import de.emilybutterfly.stimmtraining.ui.DraftPages
 import de.emilybutterfly.stimmtraining.ui.app
 import de.emilybutterfly.stimmtraining.ui.createDraftText
@@ -327,6 +329,26 @@ class DetailViewModel(
                 }
             } finally {
                 _pitchProgress.value = null
+            }
+        }
+    }
+
+    // --- Bibliothek ---
+
+    /** Legt eine Kopie des Texts in die Bibliothek; die Aufnahme behält ihren eigenen. */
+    fun addToLibrary() {
+        val recording = current ?: return
+        val attachment = attachment(recording) ?: return
+        viewModelScope.launch {
+            try {
+                withContext(NonCancellable) {
+                    val library = container.library
+                    files.requireSpaceFor(attachment.files.sumOf { it.length() })
+                    library.add(attachment, library.suggestedTitle(attachment, LibraryRepository.photoTitle(attachment)), move = false)
+                }
+                _message.value = "In die Bibliothek gelegt – dort lässt sich der Text weiterlesen."
+            } catch (e: Exception) {
+                _message.value = "Das Übernehmen in die Bibliothek ist fehlgeschlagen: ${e.message}"
             }
         }
     }

@@ -5,11 +5,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -18,6 +21,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -197,6 +201,7 @@ fun DetailScreen(
                         reader = reader,
                         onExpand = { viewing = true },
                         onOpenExternally = openExternally,
+                        onAddToLibrary = viewModel::addToLibrary,
                     )
                 }
             }
@@ -232,6 +237,7 @@ private fun RecordingDetails(
     reader: ReaderSettings,
     onExpand: () -> Unit,
     onOpenExternally: (TextAttachment.Document) -> Unit,
+    onAddToLibrary: () -> Unit,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -253,7 +259,14 @@ private fun RecordingDetails(
     )
 
     if (attachment != null) {
-        AttachmentPreview(attachment, reader, onExpand = onExpand, onOpenExternally = onOpenExternally)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            AttachmentPreview(attachment, reader, onExpand = onExpand, onOpenExternally = onOpenExternally)
+            TextButton(onClick = onAddToLibrary) {
+                Icon(Icons.Outlined.LibraryAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("In Bibliothek übernehmen")
+            }
+        }
     }
 
     Card {
