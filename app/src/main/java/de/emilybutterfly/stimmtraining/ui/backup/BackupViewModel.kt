@@ -62,8 +62,9 @@ class BackupViewModel(
     }
 
     fun export(uri: Uri) = runOperation("Sicherung wird erstellt …") {
-        val count = container.backupManager.exportTo(uri)
-        "Sicherung gespeichert ($count Aufnahmen)."
+        val result = container.backupManager.exportTo(uri)
+        val texts = if (result.texts == 1) "1 Text" else "${result.texts} Texte"
+        "Sicherung gespeichert (${result.recordings} Aufnahmen, $texts der Bibliothek)."
     }
 
     fun import(uri: Uri) = runOperation("Sicherung wird eingelesen …") {
@@ -78,6 +79,9 @@ class BackupViewModel(
             )
             if (result.skipped > 0) append(", ${result.skipped} waren schon vorhanden")
             if (result.incomplete > 0) append(", ${result.incomplete} unvollständig (Audiodatei fehlt)")
+            if (result.libraryImported > 0) {
+                append(if (result.libraryImported == 1) ", 1 Text für die Bibliothek" else ", ${result.libraryImported} Texte für die Bibliothek")
+            }
             append(".")
         }
     }

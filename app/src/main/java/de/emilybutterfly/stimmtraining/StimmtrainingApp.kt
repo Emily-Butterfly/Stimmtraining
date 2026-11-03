@@ -11,6 +11,7 @@ import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
 import de.emilybutterfly.stimmtraining.data.TechniqueContent
 import de.emilybutterfly.stimmtraining.data.TechniqueLibrary
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,9 +33,10 @@ class AppContainer(context: Context) {
     private val database = AppDatabase.build(context)
     val files = FileStore(context)
     val repository = RecordingRepository(database.recordingDao(), files)
-    val backupManager = BackupManager(context, database.recordingDao(), files)
+    val library = LibraryRepository(database.libraryDao(), files)
+    val backupManager = BackupManager(context, database.recordingDao(), library, files)
     val backupSettings = BackupSettings(context)
-    val autoBackup = AutoBackup(context, backupManager, database.recordingDao(), backupSettings)
+    val autoBackup = AutoBackup(context, backupManager, database.recordingDao(), library, backupSettings)
 
     val settings = AppSettings(context)
 

@@ -29,7 +29,9 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.ZoomIn
@@ -127,6 +129,8 @@ fun TextAttachmentSection(
     enabled: Boolean = true,
     documentListState: LazyListState? = null,
     documentContent: DocumentContent? = null,
+    onPickFromLibrary: (() -> Unit)? = null,
+    onAddToLibrary: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val canChange = enabled && !busy
@@ -271,6 +275,11 @@ fun TextAttachmentSection(
                             ButtonLabel(Icons.Outlined.ContentPaste, "Einfügen")
                         }
                     }
+                    if (onPickFromLibrary != null) {
+                        OutlinedButton(onClick = onPickFromLibrary, enabled = canChange, contentPadding = padding, modifier = Modifier.fillMaxWidth()) {
+                            ButtonLabel(Icons.AutoMirrored.Outlined.LibraryBooks, "Aus Bibliothek")
+                        }
+                    }
                 }
             }
         } else {
@@ -352,6 +361,16 @@ fun TextAttachmentSection(
                                 pasteText()
                             },
                         )
+                        if (onPickFromLibrary != null) {
+                            DropdownMenuItem(
+                                text = { Text("Aus der Bibliothek") },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.LibraryBooks, contentDescription = null) },
+                                onClick = {
+                                    menu = false
+                                    onPickFromLibrary()
+                                },
+                            )
+                        }
                     }
                 }
                 if (attachment is TextAttachment.Document && attachment.kind == DocumentKind.PlainText) {
@@ -361,6 +380,11 @@ fun TextAttachmentSection(
                 }
                 TextButton(onClick = onRemove, enabled = canChange) {
                     ButtonLabel(Icons.Outlined.Delete, "Entfernen")
+                }
+                if (onAddToLibrary != null) {
+                    TextButton(onClick = onAddToLibrary, enabled = canChange) {
+                        ButtonLabel(Icons.Outlined.LibraryAdd, "In Bibliothek übernehmen")
+                    }
                 }
             }
         }
@@ -431,13 +455,14 @@ fun AttachmentPreview(
     modifier: Modifier = Modifier,
     documentListState: LazyListState? = null,
     documentContent: DocumentContent? = null,
+    marks: ReadingMarks? = null,
 ) {
     when (attachment) {
         is TextAttachment.Photo -> Box(modifier) {
-            PhotoPager(
-                pages = attachment.pages,
+            PhotoPages(
+                photo = attachment,
+                marks = marks,
                 zoomable = false,
-                marks = { page -> PageMarks.section(page, attachment.pages.size, attachment.startY, attachment.endY) },
                 onClick = onExpand,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -455,7 +480,7 @@ fun AttachmentPreview(
             }
         }
         is TextAttachment.Document ->
-            DocumentCard(attachment, reader, onExpand, onOpenExternally, modifier, documentListState, documentContent)
+            DocumentCard(attachment, reader, onExpand, onOpenExternally, modifier, documentListState, documentContent, marks)
     }
 }
 
@@ -468,6 +493,7 @@ private fun DocumentCard(
     modifier: Modifier = Modifier,
     listState: LazyListState? = null,
     preloaded: DocumentContent? = null,
+    marks: ReadingMarks? = null,
 ) {
     val kind = document.kind
     OutlinedCard(modifier.fillMaxWidth()) {
@@ -487,7 +513,7 @@ private fun DocumentCard(
         // Eine neue Datei beginnt mit „lädt …“ und oben, nicht mit Inhalt und Position der alten.
         key(document.file) {
             val content = preloaded ?: rememberDocumentContent(document).value
-            DocumentView(content, reader, Modifier.heightIn(max = 420.dp), listState = listState ?: rememberLazyListState())
+            DocumentView(content, reader, Modifier.heightIn(max = 420.dp), listState = listState ?: rememberLazyListState(), marks = marks)
         }
         if (onOpenExternally != null) {
             HorizontalDivider()
@@ -509,16 +535,13 @@ fun AttachmentReader(
     modifier: Modifier = Modifier,
     documentListState: LazyListState? = null,
     documentContent: DocumentContent? = null,
+    marks: ReadingMarks? = null,
 ) {
     when (attachment) {
-        is TextAttachment.Photo -> PhotoPager(
-            pages = attachment.pages,
-            marks = { page -> PageMarks.section(page, attachment.pages.size, attachment.startY, attachment.endY) },
-            modifier = modifier.clipToBounds(),
-        )
+        is TextAttachment.Photo -> PhotoPages(photo = attachment, marks = marks, modifier = modifier.clipToBounds())
         is TextAttachment.Document -> key(attachment.file) {
             val content = documentContent ?: rememberDocumentContent(attachment).value
-            DocumentView(content, reader, modifier, listState = documentListState ?: rememberLazyListState())
+            DocumentView(content, reader, modifier, listState = documentListState ?: rememberLazyListState(), marks = marks)
         }
     }
 }
@@ -550,6 +573,35 @@ fun AttachmentViewer(attachment: TextAttachment, reader: ReaderSettings, onDismi
             }
         }
     }
+}
+
+/**
+ * Die Fotoseiten mit Abschnittslinien bzw. Lesefortschritt ([marks]): beim Weiterlesen ab der
+ * Seite, auf der zuletzt aufgehört wurde; ein Tipp setzt dann die Stelle statt [onClick].
+ */
+@Composable
+private fun PhotoPages(
+    photo: TextAttachment.Photo,
+    marks: ReadingMarks?,
+    modifier: Modifier = Modifier,
+    zoomable: Boolean = true,
+    onClick: (() -> Unit)? = null,
+) {
+    val first = marks?.firstPage(photo.pages.size) ?: 0
+    val pages = photo.pages.drop(first)
+    val onMark = marks?.onMark
+    PhotoPager(
+        pages = pages,
+        zoomable = zoomable,
+        marks = { page ->
+            marks?.pageMarks(first + page) ?: PageMarks.section(first + page, photo.pages.size, photo.startY, photo.endY)
+        },
+        onTapPage = onMark?.let { mark ->
+            { page: Int, y: Float -> marks.tapPage(first + page, y, pages.getOrNull(page)?.name)?.let(mark) }
+        },
+        onClick = onClick.takeIf { onMark == null },
+        modifier = modifier,
+    )
 }
 
 /** Vollbildansicht zum Durchwischen, mit Zwei-Finger-Zoom und Doppeltipp-Zoom. */

@@ -35,11 +35,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.ExpandLess
@@ -59,6 +63,8 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -85,6 +91,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -94,6 +102,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
+import de.emilybutterfly.stimmtraining.ui.components.AttachmentPreview
+import de.emilybutterfly.stimmtraining.ui.components.DocumentContent
+import de.emilybutterfly.stimmtraining.ui.components.ReaderSettings
+import de.emilybutterfly.stimmtraining.ui.components.ReadingMarks
 import de.emilybutterfly.stimmtraining.ui.components.AttachmentReader
 import de.emilybutterfly.stimmtraining.ui.components.AudioPlayerBar
 import de.emilybutterfly.stimmtraining.ui.components.ParameterForm
@@ -112,6 +125,7 @@ import de.emilybutterfly.stimmtraining.ui.techniques.ExerciseDetails
 fun RecordScreen(
     onClose: () -> Unit,
     onSaved: (Long) -> Unit,
+    onPickFromLibrary: () -> Unit = {},
     viewModel: RecordViewModel = viewModel(factory = RecordViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -123,16 +137,22 @@ fun RecordScreen(
     var confirmRetake by rememberSaveable { mutableStateOf(false) }
     var permissionDenied by rememberSaveable { mutableStateOf(false) }
     var readingMode by rememberSaveable { mutableStateOf(false) }
-    val reading = readingMode && state.attachment != null
+    val shownText = state.shownText
+    val reading = readingMode && shownText != null
     val reader = rememberReaderSettings()
     // Inline-Karte und Lesemodus sind nie gleichzeitig zu sehen und teilen sich die Leseposition;
     // das Formular behält seine Scrollposition, während der Lesemodus offen ist.
-    val documentListState = rememberSaveable(state.attachment?.files?.firstOrNull(), saver = LazyListState.Saver) { LazyListState() }
+    val documentListState = rememberSaveable(shownText?.files?.firstOrNull(), state.library?.start, saver = LazyListState.Saver) { LazyListState() }
     val formScroll = rememberScrollState()
     // Das Formular behält beim Wechsel in den Lesemodus seinen ganzen Zustand (z. B. eingeklappte Anleitung).
     val formState = rememberSaveableStateHolder()
+    // Ein Bibliothekstext zeigt nur den Rest; angetippt wird, bis wohin gelesen wurde.
+    val library = state.library
+    val marks = library?.let {
+        ReadingMarks(start = it.start, end = it.end, onMark = viewModel::markLibraryEnd.takeIf { !state.saving })
+    }
     // Einmal geladen, für Karte und Lesemodus: kein erneutes Laden und kein Springen beim Umschalten.
-    val attachedDocument = state.attachment as? TextAttachment.Document
+    val attachedDocument = shownText as? TextAttachment.Document
     val documentContent = attachedDocument?.let { document -> key(document.file) { rememberDocumentContent(document).value } }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -188,7 +208,7 @@ fun RecordScreen(
                     }
                 },
                 actions = {
-                    val attachment = state.attachment
+                    val attachment = shownText
                     if (reading && attachment is TextAttachment.Document) ReaderSizeButtons(reader, attachment.kind)
                     if (attachment != null) {
                         IconButton(onClick = { readingMode = !reading }) {
@@ -216,15 +236,19 @@ fun RecordScreen(
     ) { padding ->
         if (!guideReady) return@Scaffold
         val attachment = state.attachment
-        if (reading && attachment != null) {
+        if (reading && shownText != null) {
             // Der Text füllt den Platz zwischen Titelleiste und Aufnahme-Knöpfen.
-            AttachmentReader(
-                attachment,
-                reader,
-                Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
-                documentListState = documentListState,
-                documentContent = documentContent,
-            )
+            Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+                if (library != null) MarkHint(library, onToEnd = { viewModel.markLibraryEnd(null) })
+                AttachmentReader(
+                    shownText,
+                    reader,
+                    Modifier.weight(1f).fillMaxWidth(),
+                    documentListState = documentListState,
+                    documentContent = documentContent,
+                    marks = marks,
+                )
+            }
             return@Scaffold
         }
         formState.SaveableStateProvider("form") {
@@ -238,11 +262,32 @@ fun RecordScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                if (state.phase == RecorderPhase.Done && library != null) {
+                    ReadingQuestion(
+                        reading = library,
+                        enabled = !state.saving,
+                        onToEnd = { viewModel.markLibraryEnd(null) },
+                        onChoosePosition = { readingMode = true },
+                    )
+                }
                 if (state.phase == RecorderPhase.Done) {
                     PitchCard(result = state.pitch, progress = state.pitchProgress, onAnalyze = viewModel::analyzePitch)
                 }
                 guide?.let { GuideCard(it) }
-                TextAttachmentSection(
+                if (library != null && marks != null) {
+                    LibraryReadingCard(
+                        reading = library,
+                        busy = state.attachmentBusy,
+                        enabled = !state.isRecording && !state.saving,
+                        reader = reader,
+                        marks = marks,
+                        documentListState = documentListState,
+                        documentContent = documentContent,
+                        onExpand = { readingMode = true },
+                        onPickOther = onPickFromLibrary,
+                        onRemove = viewModel::removeLibraryText,
+                    )
+                } else TextAttachmentSection(
                     attachment = attachment,
                     busy = state.attachmentBusy,
                     reader = reader,
@@ -261,6 +306,8 @@ fun RecordScreen(
                     onOpenExternally = { document -> viewModel.openExternally(document) { context.startActivity(it) } },
                     // Kamera, Galerie oder Dateiauswahl würden die App in den Hintergrund schicken und die Aufnahme beenden.
                     enabled = !state.isRecording && !state.saving,
+                    onPickFromLibrary = onPickFromLibrary,
+                    onAddToLibrary = viewModel::addAttachmentToLibrary.takeIf { attachment != null },
                 )
                 ParameterForm(params = state.params, onChange = viewModel::updateParams)
             }
@@ -328,6 +375,144 @@ fun RecordScreen(
             dismissButton = { TextButton(onClick = { permissionDenied = false }) { Text("Abbrechen") } },
         )
     }
+}
+
+/** Hinweis über dem Text im Lesemodus: antippen, bis wohin gelesen wurde. */
+@Composable
+private fun MarkHint(reading: LibraryReading, onToEnd: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (reading.end == null) {
+                    "Tippe auf die Stelle, bis zu der du gelesen hast."
+                } else {
+                    "Gelesen ${describeEnd(reading.end)}. Tippe neu, um es zu ändern."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (reading.end != null) TextButton(onClick = onToEnd) { Text("Bis zum Ende") }
+        }
+    }
+}
+
+/** Nach dem Stoppen: Wie weit wurde gelesen? „Bis zum Ende“ ist vorausgewählt. */
+@Composable
+private fun ReadingQuestion(reading: LibraryReading, enabled: Boolean, onToEnd: () -> Unit, onChoosePosition: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+            Text(
+                "Wie weit hast du gelesen?",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            ChoiceRow(
+                selected = reading.end == null,
+                enabled = enabled,
+                title = "Bis zum Ende",
+                detail = "Der Text wandert beim Speichern nach „Gelesen“.",
+                onClick = onToEnd,
+            )
+            ChoiceRow(
+                selected = reading.end != null,
+                enabled = enabled,
+                title = "Bis zu einer Stelle",
+                detail = if (reading.end == null) {
+                    "Tippe im Text auf den Satz bzw. die Zeile, bis zu der du gekommen bist."
+                } else {
+                    "Gelesen ${describeEnd(reading.end)} – nächstes Mal geht es dort weiter."
+                },
+                onClick = onChoosePosition,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChoiceRow(selected: Boolean, enabled: Boolean, title: String, detail: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Der Text aus der Bibliothek: Rest zum Weiterlesen, mit Fortschritt; anderer Text oder entfernen. */
+@Composable
+private fun LibraryReadingCard(
+    reading: LibraryReading,
+    busy: Boolean,
+    enabled: Boolean,
+    reader: ReaderSettings,
+    marks: ReadingMarks,
+    documentListState: LazyListState,
+    documentContent: DocumentContent?,
+    onExpand: () -> Unit,
+    onPickOther: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.AutoMirrored.Outlined.LibraryBooks, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Aus der Bibliothek", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(reading.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text(
+            when {
+                reading.again -> "Schon gelesen – du liest ihn noch einmal von vorne."
+                reading.start != null -> "Es geht weiter, wo du aufgehört hast; blass ist das zuletzt Gelesene."
+                else -> "Tippe beim oder nach dem Lesen auf die Stelle, bis zu der du kommst."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        AttachmentPreview(
+            attachment = reading.attachment,
+            reader = reader,
+            onExpand = onExpand,
+            onOpenExternally = null,
+            documentListState = documentListState,
+            documentContent = documentContent,
+            marks = marks,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = onPickOther, enabled = enabled && !busy) {
+                Icon(Icons.Outlined.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Anderer Text")
+            }
+            TextButton(onClick = onRemove, enabled = enabled && !busy) {
+                Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Entfernen")
+            }
+        }
+        if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+    }
+}
+
+/** „bis zum Ende“, „bis „…Satzende““ oder „bis Seite 3“. */
+private fun describeEnd(end: ReadingPosition?): String = when (end) {
+    null -> "bis zum Ende"
+    is ReadingPosition.InText -> {
+        val tail = end.anchor.takeLast(50)
+        "bis „${if (tail.length < end.anchor.length) "…$tail" else tail}“"
+    }
+    is ReadingPosition.OnPage -> "bis Seite ${end.page + 1}"
 }
 
 @Composable

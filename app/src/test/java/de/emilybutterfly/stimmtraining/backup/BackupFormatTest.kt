@@ -1,6 +1,7 @@
 package de.emilybutterfly.stimmtraining.backup
 
 import de.emilybutterfly.stimmtraining.data.Recording
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -128,11 +129,29 @@ class BackupFormatTest {
         val json = JSONObject(BackupFormat.manifest(listOf(sample), 1L, "1.0"))
         val list = json.getJSONArray("recordings")
         list.put(JSONObject(list.getJSONObject(0).toString()).put("audio", "audio/../evil"))
-        list.put(JSONObject(list.getJSONObject(0).toString()).put("uuid", "../../x").put("photo", "../x.jpg"))
+        list.put(JSONObject(list.getJSONObject(0).toString()).put("uuid", "../../x").put("photos", JSONArray().put("../x.jpg")))
         val parsed = BackupFormat.parse(json.toString())
         assertEquals(2, parsed.size)
         val repaired = parsed[1].recording
         assertTrue(repaired.uuid.matches(Regex("[0-9a-f-]{36}")))
         assertNull(repaired.photoFile)
+    }
+
+    @Test
+    fun olderBackupsWithASinglePhotoAndSeveralPagesWithSectionLinesAreRead() {
+        val json = JSONObject(BackupFormat.manifest(listOf(sample), 1L, "1.0"))
+        val list = json.getJSONArray("recordings")
+        val legacy = JSONObject(list.getJSONObject(0).toString())
+        legacy.remove("photos")
+        legacy.remove("section")
+        legacy.put("photo", "photos/a.jpg")
+        list.put(0, legacy)
+        assertEquals(listOf("a.jpg"), BackupFormat.parse(json.toString()).single().recording.photoPages)
+
+        val pages = sample.copy(photoFile = "a.jpg\nb.jpg", sectionStartY = 0.25f, sectionEndY = 0.75f)
+        val parsed = BackupFormat.parse(BackupFormat.manifest(listOf(pages), 1L, "1.0")).single().recording
+        assertEquals(listOf("a.jpg", "b.jpg"), parsed.photoPages)
+        assertEquals(0.25f, parsed.sectionStartY)
+        assertEquals(0.75f, parsed.sectionEndY)
     }
 }

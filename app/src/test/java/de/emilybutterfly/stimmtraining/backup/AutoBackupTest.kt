@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import de.emilybutterfly.stimmtraining.data.AppDatabase
 import de.emilybutterfly.stimmtraining.data.FileStore
 import kotlinx.coroutines.runBlocking
@@ -37,7 +38,7 @@ class AutoBackupTest {
         val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         val settings = BackupSettings(context)
         settings.setFolder(Uri.parse("content://nirgendwo/tree/ordner"))
-        val autoBackup = AutoBackup(context, BackupManager(context, db.recordingDao(), FileStore(context)), db.recordingDao(), settings)
+        val autoBackup = AutoBackup(context, BackupManager(context, db.recordingDao(), LibraryRepository(db.libraryDao(), FileStore(context)), FileStore(context)), db.recordingDao(), LibraryRepository(db.libraryDao(), FileStore(context)), settings)
 
         assertTrue(autoBackup.run(force = true))
 

@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,6 +53,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -63,6 +67,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -213,6 +218,7 @@ fun DocumentView(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     listState: LazyListState = rememberLazyListState(),
+    marks: ReadingMarks? = null,
 ) {
     when (content) {
         DocumentContent.Loading -> Box(modifier.fillMaxWidth().heightIn(min = 120.dp), contentAlignment = Alignment.Center) {
@@ -221,8 +227,8 @@ fun DocumentView(
         is DocumentContent.Failed -> Box(modifier.fillMaxWidth().padding(contentPadding)) {
             Text(content.message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
-        is DocumentContent.Text -> TextDocumentView(content.document, settings, modifier, contentPadding, listState)
-        is DocumentContent.Pdf -> PdfView(content.pages, settings, modifier, contentPadding, listState)
+        is DocumentContent.Text -> TextDocumentView(content.document, settings, modifier, contentPadding, listState, marks)
+        is DocumentContent.Pdf -> PdfView(content.pages, settings, modifier, contentPadding, listState, marks)
     }
 }
 
@@ -233,6 +239,7 @@ private fun TextDocumentView(
     modifier: Modifier,
     contentPadding: PaddingValues,
     listState: LazyListState,
+    marks: ReadingMarks?,
 ) {
     if (document.isBlank()) {
         Box(modifier.fillMaxWidth().padding(contentPadding)) {
@@ -245,13 +252,25 @@ private fun TextDocumentView(
         return
     }
     val size = settings.textSize
+    val reading = marks?.let { rememberTextReading(document, it) }
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxWidth().pinchToZoom(settings::zoomText),
         contentPadding = contentPadding,
         verticalArrangement = Arrangement.spacedBy((size * 0.7f).dp),
     ) {
-        items(document.blocks) { block -> BlockText(block, size) }
+        if (reading == null) {
+            items(document.blocks) { block -> BlockText(block, size) }
+        } else {
+            items(reading.blocks, key = { it.index }) { shown ->
+                BlockText(
+                    block = document.blocks[shown.index],
+                    size = size,
+                    text = reading.annotated(shown, document.blocks[shown.index].annotated()),
+                    onTap = marks.onMark?.let { { local: Int -> reading.tap(shown, local) } },
+                )
+            }
+        }
         if (document.truncated) {
             item {
                 Text(
@@ -264,8 +283,12 @@ private fun TextDocumentView(
     }
 }
 
+/**
+ * Ein Absatz. Mit [text] wird statt des ganzen Absatzes dieser (z. B. gekürzte, markierte) Text
+ * gezeigt; [onTap] bekommt die angetippte Zeichenposition darin.
+ */
 @Composable
-private fun BlockText(block: TextBlock, size: Float) {
+private fun BlockText(block: TextBlock, size: Float, text: AnnotatedString? = null, onTap: ((Int) -> Unit)? = null) {
     val base = MaterialTheme.typography.bodyLarge.copy(fontSize = size.sp, lineHeight = (size * 1.45f).sp)
     val style = when (block.style) {
         BlockStyle.Heading1 -> base.copy(fontSize = (size * 1.45f).sp, lineHeight = (size * 1.8f).sp, fontWeight = FontWeight.Bold)
@@ -273,19 +296,30 @@ private fun BlockText(block: TextBlock, size: Float) {
         BlockStyle.Heading3 -> base.copy(fontSize = (size * 1.1f).sp, fontWeight = FontWeight.Bold)
         else -> base
     }
-    val text = remember(block) { block.annotated() }
+    val plain = remember(block) { block.annotated() }
+    val shown = text ?: plain
     val indent = (block.level * 20).dp
+    // Für das Antippen eines Satzes: wo welches Zeichen liegt.
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val currentOnTap by rememberUpdatedState(onTap)
+    val tappable = if (onTap == null) {
+        Modifier
+    } else {
+        Modifier.pointerInput(Unit) {
+            detectTapGestures { position -> layout?.let { currentOnTap?.invoke(it.getOffsetForPosition(position)) } }
+        }
+    }
     when (block.style) {
         BlockStyle.ListItem -> Row(Modifier.padding(start = indent)) {
             Text(block.marker.orEmpty(), style = style, modifier = Modifier.widthIn(min = (size * 1.6f).dp))
-            Text(text, style = style, modifier = Modifier.weight(1f))
+            Text(shown, style = style, onTextLayout = { layout = it }, modifier = Modifier.weight(1f).then(tappable))
         }
         BlockStyle.Quote -> Row(Modifier.padding(start = indent).height(IntrinsicSize.Min)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.primary))
             Spacer(Modifier.width(12.dp))
-            Text(text, style = style, modifier = Modifier.weight(1f))
+            Text(shown, style = style, onTextLayout = { layout = it }, modifier = Modifier.weight(1f).then(tappable))
         }
-        else -> Text(text, style = style, modifier = Modifier.padding(start = indent))
+        else -> Text(shown, style = style, onTextLayout = { layout = it }, modifier = Modifier.padding(start = indent).then(tappable))
     }
 }
 
@@ -310,6 +344,7 @@ private fun PdfView(
     modifier: Modifier,
     contentPadding: PaddingValues,
     listState: LazyListState,
+    marks: ReadingMarks?,
 ) {
     BoxWithConstraints(
         modifier
@@ -332,12 +367,17 @@ private fun PdfView(
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(pages.pageCount) { index ->
+            // Beim Weiterlesen beginnt die Ansicht auf der Seite, auf der zuletzt aufgehört wurde.
+            val first = marks?.firstPage(pages.pageCount) ?: 0
+            items(pages.pageCount - first, key = { first + it }) { offset ->
+                val index = first + offset
                 val size = pages.pageSizes[index]
                 PdfPage(
                     pages = pages,
                     index = index,
                     renderPx = renderPx,
+                    marks = marks?.pageMarks(index),
+                    onTapY = marks?.onMark?.let { onMark -> { y: Float -> marks.tapPage(index, y, null)?.let(onMark) } },
                     modifier = Modifier.fillMaxWidth().aspectRatio(size.width.toFloat() / size.height),
                 )
             }
@@ -346,7 +386,14 @@ private fun PdfView(
 }
 
 @Composable
-private fun PdfPage(pages: PdfPages, index: Int, renderPx: Int, modifier: Modifier) {
+private fun PdfPage(
+    pages: PdfPages,
+    index: Int,
+    renderPx: Int,
+    modifier: Modifier,
+    marks: PageMarks? = null,
+    onTapY: ((Float) -> Unit)? = null,
+) {
     var bitmap by remember(pages, index) { mutableStateOf<ImageBitmap?>(null) }
     // Zoomstufen, die dasselbe Bild ergeben, lösen kein neues Rendern aus.
     val renderWidth = pages.renderSize(index, renderPx).width
@@ -355,7 +402,25 @@ private fun PdfPage(pages: PdfPages, index: Int, renderPx: Int, modifier: Modifi
         val rendered = withContext(PdfDispatcher) { runCatching { pages.render(index, renderWidth) }.getOrNull() }
         if (rendered != null) bitmap = rendered.asImageBitmap()
     }
-    Box(modifier.background(Color.White)) {
+    val colors = pageMarkColors()
+    val currentOnTapY by rememberUpdatedState(onTapY)
+    Box(
+        modifier
+            .background(Color.White)
+            .then(
+                if (onTapY == null) {
+                    Modifier
+                } else {
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures { tap -> currentOnTapY?.invoke((tap.y / size.height).coerceIn(0f, 1f)) }
+                    }
+                },
+            )
+            .drawWithContent {
+                drawContent()
+                if (marks != null) drawPageMarks(marks, Rect(Offset.Zero, this.size), colors)
+            },
+    ) {
         bitmap?.let {
             Image(it, contentDescription = "Seite ${index + 1} von ${pages.pageCount}", contentScale = ContentScale.FillBounds, modifier = Modifier.fillMaxSize())
         }

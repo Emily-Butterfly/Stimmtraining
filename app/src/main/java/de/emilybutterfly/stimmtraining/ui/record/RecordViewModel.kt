@@ -18,6 +18,8 @@ import de.emilybutterfly.stimmtraining.data.Exercise
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
+import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
 import de.emilybutterfly.stimmtraining.data.pageNames
 import de.emilybutterfly.stimmtraining.ui.DraftPages
 import de.emilybutterfly.stimmtraining.ui.app
@@ -61,10 +63,28 @@ data class StorageWarning(val freeBytes: Long, val full: Boolean) {
         get() = ((freeBytes - FileStore.RESERVE_BYTES) / FileStore.AUDIO_BYTES_PER_MINUTE).coerceAtLeast(0)
 }
 
+/**
+ * Ein Text aus der Bibliothek, der gerade gelesen wird. Seine Dateien gehören der Bibliothek und
+ * werden hier nie gelöscht; gespeichert wird nur der gelesene Abschnitt.
+ */
+data class LibraryReading(
+    val textId: Long,
+    val title: String,
+    val attachment: TextAttachment,
+    /** Ab hier wird gelesen; null: von vorne. */
+    val start: ReadingPosition? = null,
+    /** Die angetippte Stelle; null: bis zum Ende. */
+    val end: ReadingPosition? = null,
+    /** Der Text war schon zu Ende gelesen und wird noch einmal von vorne gelesen. */
+    val again: Boolean = false,
+)
+
 data class RecordUiState(
     val params: RecordingParams = RecordingParams(),
-    /** Der gelesene Text: Foto oder Datei. */
+    /** Der gelesene Text: Foto oder Datei (eigene Entwürfe). */
     val attachment: TextAttachment? = null,
+    /** Stattdessen ein Text aus der Bibliothek. */
+    val library: LibraryReading? = null,
     val attachmentBusy: Boolean = false,
     val phase: RecorderPhase = RecorderPhase.Idle,
     val elapsedMs: Long = 0,
@@ -87,7 +107,10 @@ data class RecordUiState(
 
     /** Auch ein noch laufender Import zählt, damit „Zurück“ erst nachfragt. */
     val hasDraft: Boolean
-        get() = attachment != null || attachmentBusy || phase != RecorderPhase.Idle || params != initialParams
+        get() = attachment != null || library != null || attachmentBusy || phase != RecorderPhase.Idle || params != initialParams
+
+    /** Der Text, der angezeigt wird: eigener Anhang oder der aus der Bibliothek. */
+    val shownText: TextAttachment? get() = attachment ?: library?.attachment
 }
 
 /** Die Übung aus „Techniken & Übungen“, mit der diese Aufnahme gestartet wurde. */
@@ -120,6 +143,7 @@ class RecordViewModel(
     private var ticker: Job? = null
     private var pitchJob: Job? = null
     private var importJob: Job? = null
+    private var libraryJob: Job? = null
 
     init {
         // Entwurf sichern, damit er überlebt, wenn Android die App im Hintergrund beendet
@@ -128,6 +152,16 @@ class RecordViewModel(
             _state.map(::persistable).distinctUntilChanged().collect(::persist)
         }
         loadGuide()
+        restoreLibrary()
+        // Aus der Bibliothek gewählt (über die Auswahl-Ansicht, die das Ergebnis hier ablegt).
+        viewModelScope.launch {
+            savedState.getStateFlow<Long?>(KEY_PICKED_LIBRARY_TEXT, null).collect { id ->
+                if (id != null) {
+                    savedState[KEY_PICKED_LIBRARY_TEXT] = null
+                    selectLibraryText(id)
+                }
+            }
+        }
         // Wer die Tonhöhe ausblendet, soll auch keine laufende Analyse mehr spüren (Meldungen, Warten beim Speichern).
         viewModelScope.launch {
             container.settings.gentleMode.collect { gentle -> if (gentle) pitchJob?.cancel() }
@@ -171,6 +205,8 @@ class RecordViewModel(
     private data class Persistable(
         val params: RecordingParams,
         val initialParams: RecordingParams,
+        val libraryId: Long?,
+        val libraryEnd: ReadingPosition?,
         val photo: String?,
         val document: String?,
         val documentName: String?,
@@ -185,6 +221,8 @@ class RecordViewModel(
         return Persistable(
             params = state.params,
             initialParams = state.initialParams,
+            libraryId = state.library?.textId,
+            libraryEnd = state.library?.end,
             photo = (state.attachment as? TextAttachment.Photo)?.pages?.joinToString("\n") { it.absolutePath },
             document = (state.attachment as? TextAttachment.Document)?.file?.absolutePath,
             documentName = (state.attachment as? TextAttachment.Document)?.name,
@@ -198,6 +236,16 @@ class RecordViewModel(
     private fun persist(p: Persistable) {
         savedState.putParams(KEY_PARAMS, p.params)
         savedState.putParams(KEY_INITIAL_PARAMS, p.initialParams)
+        // Erst setzen, wenn der Text geladen ist: Bis dahin gilt noch der gesicherte Stand.
+        if (!restoringLibrary) {
+            savedState[KEY_LIBRARY_ID] = p.libraryId
+            val end = p.libraryEnd
+            savedState[KEY_LIBRARY_END_OFFSET] = (end as? ReadingPosition.InText)?.offset
+            savedState[KEY_LIBRARY_END_ANCHOR] = (end as? ReadingPosition.InText)?.anchor
+            savedState[KEY_LIBRARY_END_PAGE] = (end as? ReadingPosition.OnPage)?.page
+            savedState[KEY_LIBRARY_END_Y] = (end as? ReadingPosition.OnPage)?.y
+            savedState[KEY_LIBRARY_END_PAGE_NAME] = (end as? ReadingPosition.OnPage)?.pageName
+        }
         savedState[KEY_PHOTO] = p.photo
         savedState[KEY_DOCUMENT] = p.document
         savedState[KEY_DOCUMENT_NAME] = p.documentName
@@ -242,6 +290,100 @@ class RecordViewModel(
 
     fun updateParams(params: RecordingParams) = _state.update { it.copy(params = params) }
 
+    // --- Text aus der Bibliothek ---
+
+    /** Solange ein gesicherter Bibliothekstext noch geladen wird, bleibt sein gesicherter Stand stehen. */
+    private var restoringLibrary = false
+
+    /** Nach einem Neustart durch Android: den gewählten Text samt angetippter Stelle wieder laden. */
+    private fun restoreLibrary() {
+        val saved = savedState.get<Long>(KEY_LIBRARY_ID)
+        val fromArgument = savedState.get<Long>(ARG_LIBRARY_TEXT)?.takeIf { it > 0 && savedState.get<Boolean>(KEY_LIBRARY_ARG_USED) != true }
+        when {
+            saved != null -> {
+                val end = savedState.get<Int>(KEY_LIBRARY_END_OFFSET)?.let { offset ->
+                    savedState.get<String>(KEY_LIBRARY_END_ANCHOR)?.let { ReadingPosition.InText(offset, it) }
+                } ?: savedState.get<Int>(KEY_LIBRARY_END_PAGE)?.let { page ->
+                    savedState.get<Float>(KEY_LIBRARY_END_Y)?.let { ReadingPosition.OnPage(page, it, savedState[KEY_LIBRARY_END_PAGE_NAME]) }
+                }
+                restoringLibrary = true
+                loadLibraryText(saved, end) { restoringLibrary = false }
+            }
+            fromArgument != null -> {
+                savedState[KEY_LIBRARY_ARG_USED] = true
+                selectLibraryText(fromArgument)
+            }
+        }
+    }
+
+    /** Wählt einen Text der Bibliothek; ein eigener Anhang wird dabei verworfen. */
+    fun selectLibraryText(id: Long) {
+        if (_state.value.isRecording || _state.value.saving) return
+        loadLibraryText(id, end = null) {}
+    }
+
+    private fun loadLibraryText(id: Long, end: ReadingPosition?, done: () -> Unit) {
+        libraryJob?.cancel()
+        libraryJob = viewModelScope.launch {
+            _state.update { it.copy(attachmentBusy = true) }
+            try {
+                val text = container.library.get(id)
+                val attachment = text?.let(container.library::attachmentOf)
+                if (text == null || attachment == null) {
+                    _state.update { it.copy(attachmentBusy = false, library = null, message = "Diesen Text gibt es nicht mehr in der Bibliothek.") }
+                    return@launch
+                }
+                val start = container.library.startOf(text)
+                val previous = _state.value.attachment
+                _state.update {
+                    it.copy(
+                        attachment = null,
+                        attachmentBusy = false,
+                        library = LibraryReading(text.id, text.title, attachment, start.position, end, again = text.isFinished),
+                        message = if (start.lost) POSITION_LOST else it.message,
+                    )
+                }
+                previous?.files?.forEach { it.delete() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(attachmentBusy = false, message = "Der Text ließ sich nicht laden: ${e.message}") }
+            } finally {
+                done()
+                persist(persistable(_state.value))
+            }
+        }
+    }
+
+    /** Bis hier gelesen; null heißt bis zum Ende. */
+    fun markLibraryEnd(position: ReadingPosition?) = _state.update { it.copy(library = it.library?.copy(end = position)) }
+
+    /** Den Bibliothekstext nicht mehr verwenden; er bleibt unverändert in der Bibliothek. */
+    fun removeLibraryText() {
+        libraryJob?.cancel()
+        _state.update { it.copy(library = null, attachmentBusy = false) }
+    }
+
+    /** Legt den eigenen Anhang in die Bibliothek und liest ihn von dort – mit Fortschritt. */
+    fun addAttachmentToLibrary() {
+        val attachment = _state.value.attachment ?: return
+        if (_state.value.attachmentBusy || _state.value.saving) return
+        importJob = viewModelScope.launch {
+            _state.update { it.copy(attachmentBusy = true) }
+            try {
+                val title = container.library.suggestedTitle(attachment, LibraryRepository.photoTitle(attachment))
+                val id = withContext(NonCancellable) { container.library.add(attachment, title, move = true) }
+                _state.update { it.copy(attachment = null) }
+                loadLibraryText(id, end = null) {}
+                _state.update { it.copy(message = "In die Bibliothek gelegt. Tippe nach dem Lesen auf die Stelle, bis zu der du gekommen bist.") }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(attachmentBusy = false, message = "Das Übernehmen in die Bibliothek ist fehlgeschlagen: ${e.message}") }
+            }
+        }
+    }
+
     // --- Text: Foto oder Datei ---
 
     fun cameraTarget(): Uri = container.files.prepareCameraCapture()
@@ -281,7 +423,7 @@ class RecordViewModel(
                     DraftPages.append(null, added)
                 }
                 _state.update {
-                    it.copy(attachment = photo, attachmentBusy = false, message = if (dropped > 0) TOO_MANY_PAGES else it.message)
+                    it.copy(attachment = photo, library = null, attachmentBusy = false, message = if (dropped > 0) TOO_MANY_PAGES else it.message)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -330,7 +472,7 @@ class RecordViewModel(
             try {
                 val attachment = load()
                 val previous = _state.value.attachment
-                _state.update { it.copy(attachment = attachment, attachmentBusy = false) }
+                _state.update { it.copy(attachment = attachment, library = null, attachmentBusy = false) }
                 previous?.files?.forEach { it.delete() }
             } catch (e: CancellationException) {
                 throw e
@@ -545,7 +687,8 @@ class RecordViewModel(
     fun discardDraft() {
         // Ein noch laufender Import räumt seinen Entwurf beim Abbrechen selbst weg.
         importJob?.cancel()
-        _state.update { it.copy(attachmentBusy = false) }
+        libraryJob?.cancel()
+        _state.update { it.copy(attachmentBusy = false, library = null) }
         discardRecording()
         removeAttachment()
     }
@@ -565,15 +708,33 @@ class RecordViewModel(
                     _state.update { it.copy(saving = false) }
                     return@launch
                 }
+                val reading = now.library
                 val id = withContext(NonCancellable) {
-                    container.repository.create(
-                        draftAudio = audio,
-                        draftAttachment = now.attachment,
-                        recordedAt = now.recordedAt ?: System.currentTimeMillis(),
-                        durationMs = now.durationMs,
-                        params = now.params,
-                        pitch = now.pitch,
-                    )
+                    // Aus der Bibliothek kommt nur der gelesene Abschnitt an die Aufnahme.
+                    val section = reading?.let { r ->
+                        container.library.get(r.textId)?.let { text -> runCatching { container.library.section(text, r.start, r.end) }.getOrNull() }
+                    }
+                    val draft = if (reading != null) section?.attachment else now.attachment
+                    val id = try {
+                        container.repository.create(
+                            draftAudio = audio,
+                            draftAttachment = draft,
+                            recordedAt = now.recordedAt ?: System.currentTimeMillis(),
+                            durationMs = now.durationMs,
+                            params = now.params,
+                            pitch = now.pitch,
+                        )
+                    } catch (e: Exception) {
+                        if (reading != null) section?.attachment?.files?.forEach { it.delete() }
+                        throw e
+                    }
+                    if (reading != null && section != null) {
+                        // Die Aufnahme ist gespeichert; ein Fehler beim Fortschritt soll sie nicht kosten.
+                        runCatching {
+                            container.library.recordReading(reading.textId, if (section.finished) null else reading.end, section.fraction)
+                        }
+                    }
+                    id
                 }
                 onSaved(id)
             } catch (e: Exception) {
@@ -623,6 +784,17 @@ class RecordViewModel(
         /** Navigationsargumente, wenn die Aufnahme aus einer Übung heraus gestartet wird. */
         const val ARG_TECHNIQUE = "technique"
         const val ARG_EXERCISE = "exercise"
+        /** Mit diesem Bibliothekstext beginnen (z. B. „Für eine Aufnahme verwenden“). */
+        const val ARG_LIBRARY_TEXT = "libraryText"
+        /** Hier legt die Bibliotheks-Auswahl den gewählten Text ab. */
+        const val KEY_PICKED_LIBRARY_TEXT = "pickedLibraryText"
+        internal const val KEY_LIBRARY_ID = "libraryId"
+        internal const val KEY_LIBRARY_ARG_USED = "libraryArgUsed"
+        internal const val KEY_LIBRARY_END_OFFSET = "libraryEndOffset"
+        internal const val KEY_LIBRARY_END_ANCHOR = "libraryEndAnchor"
+        internal const val KEY_LIBRARY_END_PAGE = "libraryEndPage"
+        internal const val KEY_LIBRARY_END_Y = "libraryEndY"
+        internal const val KEY_LIBRARY_END_PAGE_NAME = "libraryEndPageName"
         internal const val KEY_PHOTO = "photo"
         internal const val KEY_DOCUMENT = "document"
         internal const val KEY_DOCUMENT_NAME = "documentName"
@@ -634,6 +806,7 @@ class RecordViewModel(
         internal const val KEY_PITCH_LOW = "pitchLow"
         internal const val KEY_PITCH_HIGH = "pitchHigh"
 
+        private const val POSITION_LOST = "Die Stelle, bis zu der du gelesen hattest, war nicht mehr zu finden – der Text beginnt von vorne."
         private const val TOO_MANY_PAGES = "Mehr als ${TextAttachment.MAX_PAGES} Seiten passen nicht – die übrigen wurden nicht übernommen."
 
         /** Darunter lohnt keine Aufnahme mehr: etwa eine Minute. */

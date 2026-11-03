@@ -21,13 +21,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -41,7 +45,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -99,6 +105,7 @@ fun RecordingListScreen(
     onOpenTechniques: () -> Unit,
     onOpenPitchHistory: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenLibrary: () -> Unit,
     viewModel: RecordingListViewModel = viewModel(factory = RecordingListViewModel.Factory),
 ) {
     val recordings by viewModel.recordings.collectAsStateWithLifecycle()
@@ -114,14 +121,36 @@ fun RecordingListScreen(
                             Icon(Icons.Outlined.Insights, contentDescription = "Tonhöhen-Verlauf")
                         }
                     }
+                    IconButton(onClick = onOpenLibrary) {
+                        Icon(Icons.AutoMirrored.Outlined.LibraryBooks, contentDescription = "Bibliothek")
+                    }
                     IconButton(onClick = onOpenTechniques) {
                         Icon(Icons.Outlined.School, contentDescription = "Techniken & Übungen")
                     }
-                    IconButton(onClick = onOpenBackup) {
-                        Icon(Icons.Outlined.Backup, contentDescription = "Backup")
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Einstellungen")
+                    // Seltener gebraucht: im Menü, damit der Titel auch auf schmalen Handys Platz hat.
+                    var menu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menu = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "Mehr")
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Backup") },
+                                leadingIcon = { Icon(Icons.Outlined.Backup, contentDescription = null) },
+                                onClick = {
+                                    menu = false
+                                    onOpenBackup()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Einstellungen") },
+                                leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
+                                onClick = {
+                                    menu = false
+                                    onOpenSettings()
+                                },
+                            )
+                        }
                     }
                 },
             )

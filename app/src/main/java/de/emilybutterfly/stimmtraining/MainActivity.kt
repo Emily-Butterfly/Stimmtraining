@@ -17,6 +17,8 @@ import androidx.navigation.navArgument
 import de.emilybutterfly.stimmtraining.ui.LocalAppSettings
 import de.emilybutterfly.stimmtraining.ui.backup.BackupScreen
 import de.emilybutterfly.stimmtraining.ui.detail.DetailScreen
+import de.emilybutterfly.stimmtraining.ui.library.LibraryScreen
+import de.emilybutterfly.stimmtraining.ui.library.LibraryTextScreen
 import de.emilybutterfly.stimmtraining.ui.list.RecordingListScreen
 import de.emilybutterfly.stimmtraining.ui.pitch.PitchHistoryScreen
 import de.emilybutterfly.stimmtraining.ui.record.RecordScreen
@@ -69,6 +71,45 @@ private fun AppNavigation() {
                 onOpenTechniques = { navController.fromCurrent(entry) { navigate("techniques") } },
                 onOpenPitchHistory = { navController.fromCurrent(entry) { navigate("pitch") } },
                 onOpenSettings = { navController.fromCurrent(entry) { navigate("settings") } },
+                onOpenLibrary = { navController.fromCurrent(entry) { navigate("library") } },
+            )
+        }
+        composable("library") { entry ->
+            LibraryScreen(
+                onClose = { navController.fromCurrent(entry) { popBackStack() } },
+                onOpenText = { id -> navController.fromCurrent(entry) { navigate("library/text/$id") } },
+                onAddText = { navController.fromCurrent(entry) { navigate("library/new") } },
+            )
+        }
+        composable("library/pick") { entry ->
+            LibraryScreen(
+                onClose = { navController.fromCurrent(entry) { popBackStack() } },
+                onOpenText = {},
+                onAddText = { navController.fromCurrent(entry) { navigate("library/new") } },
+                onPick = { id ->
+                    navController.fromCurrent(entry) {
+                        // Das Ergebnis landet im gesicherten Zustand der Aufnahme, die gewählt hat.
+                        previousBackStackEntry?.savedStateHandle?.set(RecordViewModel.KEY_PICKED_LIBRARY_TEXT, id)
+                        popBackStack()
+                    }
+                },
+            )
+        }
+        composable("library/new") { entry ->
+            LibraryTextScreen(
+                textId = null,
+                onClose = { navController.fromCurrent(entry) { popBackStack() } },
+                onRecord = {},
+            )
+        }
+        composable(
+            route = "library/text/{id}",
+            arguments = listOf(navArgument("id") { type = NavType.LongType }),
+        ) { entry ->
+            LibraryTextScreen(
+                textId = entry.arguments?.getLong("id") ?: 0L,
+                onClose = { navController.fromCurrent(entry) { popBackStack() } },
+                onRecord = { id -> navController.fromCurrent(entry) { navigate("record?${RecordViewModel.ARG_LIBRARY_TEXT}=$id") } },
             )
         }
         composable("settings") { entry ->
@@ -82,7 +123,8 @@ private fun AppNavigation() {
         }
         composable(
             route = "record?${RecordViewModel.ARG_TECHNIQUE}={${RecordViewModel.ARG_TECHNIQUE}}" +
-                "&${RecordViewModel.ARG_EXERCISE}={${RecordViewModel.ARG_EXERCISE}}",
+                "&${RecordViewModel.ARG_EXERCISE}={${RecordViewModel.ARG_EXERCISE}}" +
+                "&${RecordViewModel.ARG_LIBRARY_TEXT}={${RecordViewModel.ARG_LIBRARY_TEXT}}",
             arguments = listOf(
                 navArgument(RecordViewModel.ARG_TECHNIQUE) {
                     type = NavType.StringType
@@ -94,10 +136,15 @@ private fun AppNavigation() {
                     nullable = true
                     defaultValue = null
                 },
+                navArgument(RecordViewModel.ARG_LIBRARY_TEXT) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
             ),
         ) { entry ->
             RecordScreen(
                 onClose = { navController.fromCurrent(entry) { popBackStack() } },
+                onPickFromLibrary = { navController.fromCurrent(entry) { navigate("library/pick") } },
                 onSaved = { id ->
                     navController.fromCurrent(entry) {
                         // Nur die Aufnahme ersetzen: Zurück führt dorthin, wo sie gestartet wurde

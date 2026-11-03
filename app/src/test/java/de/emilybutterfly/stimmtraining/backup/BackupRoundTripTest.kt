@@ -4,12 +4,15 @@ import android.app.Application
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
+import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
 import de.emilybutterfly.stimmtraining.data.AppDatabase
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -50,7 +53,7 @@ class BackupRoundTripTest {
         db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
         files = FileStore(context)
         repository = RecordingRepository(db.recordingDao(), files)
-        manager = BackupManager(context, db.recordingDao(), files)
+        manager = BackupManager(context, db.recordingDao(), LibraryRepository(db.libraryDao(), files), files)
     }
 
     private fun draft(extension: String, bytes: ByteArray) =
@@ -88,7 +91,7 @@ class BackupRoundTripTest {
         val before = db.recordingDao().getAll()
 
         val zip = ByteArrayOutputStream()
-        assertEquals(3, manager.export(zip))
+        assertEquals(3, manager.export(zip).recordings)
 
         openFreshDevice()
         val result = manager.import(ByteArrayInputStream(zip.toByteArray()))
@@ -108,6 +111,70 @@ class BackupRoundTripTest {
         val again = manager.import(ByteArrayInputStream(zip.toByteArray()))
         assertEquals(ImportResult(imported = 0, skipped = 3, incomplete = 0), again)
         assertEquals(3, db.recordingDao().getAll().size)
+    }
+
+    @Test
+    fun theLibraryWithTagsAndProgressAndPagesTravelsAlong() = runBlocking {
+        val library = LibraryRepository(db.libraryDao(), files)
+        // Ein mehrseitiger Fototext, angefangen auf Seite 2.
+        val pages = listOf(draft("jpg", byteArrayOf(1)), draft("jpg", byteArrayOf(2)), draft("jpg", byteArrayOf(3)))
+        val photoId = library.add(TextAttachment.Photo(pages), "Zeitung", listOf("Zeitung", "kurz"), move = true)
+        val secondPage = assertNotNull(db.libraryDao().get(photoId)).photoPages[1]
+        library.recordReading(photoId, ReadingPosition.OnPage(1, 0.4f, secondPage), 0.45f)
+        library.setPinned(photoId, true)
+        // Ein Text, gelesen bis zum zweiten Satz.
+        val text = "Der Nordwind und die Sonne stritten sich. Da kam ein Wanderer. Er trug einen warmen Mantel."
+        val textId = library.add(TextAttachment.Document(draft("txt", text.toByteArray()), "Nordwind.txt"), "Nordwind", move = true)
+        library.recordReading(textId, ReadingPosition.InText(text.indexOf("Wanderer.") + 9, "Da kam ein Wanderer."), 0.6f)
+        // Und einer, der schon zu Ende gelesen ist.
+        val doneId = library.add(TextAttachment.Document(draft("md", "# Gedicht".toByteArray()), "Gedicht.md"), "Gedicht", move = true)
+        library.recordReading(doneId, end = null, fraction = null)
+        val before = db.libraryDao().getAll()
+
+        val zip = ByteArrayOutputStream()
+        assertEquals(3, manager.export(zip).texts)
+        openFreshDevice()
+        val result = manager.import(ByteArrayInputStream(zip.toByteArray()))
+        assertEquals(3, result.libraryImported)
+
+        val after = db.libraryDao().getAll()
+        assertEquals(before.map { it.uuid }, after.map { it.uuid })
+        val photo = after.first { it.title == "Zeitung" }
+        assertEquals(listOf("Zeitung", "kurz"), photo.tagList)
+        assertEquals(true, photo.pinned)
+        assertEquals(listOf<Byte>(1, 2, 3), photo.photoPages.map { files.library(it).readBytes().single() })
+        val position = photo.progress as ReadingPosition.OnPage
+        assertEquals(1, position.page)
+        assertEquals(0.4f, position.y)
+        assertEquals("Seitenname zeigt auf die neue Datei", photo.photoPages[1], position.pageName)
+        assertEquals(0.45f, photo.progressFraction)
+
+        val nordwind = after.first { it.title == "Nordwind" }
+        assertEquals(ReadingPosition.InText(text.indexOf("Wanderer.") + 9, "Da kam ein Wanderer."), nordwind.progress)
+        assertEquals(text, files.library(assertNotNull(nordwind.documentFile)).readText())
+        assertEquals("Suche funktioniert nach dem Wiederherstellen", listOf(nordwind.id), db.libraryDao().observeMatches("wanderer").first())
+
+        val poem = after.first { it.title == "Gedicht" }
+        assertNotNull(poem.finishedAt)
+        assertNull(poem.progress)
+
+        // Noch einmal einspielen: nichts doppelt.
+        assertEquals(0, manager.import(ByteArrayInputStream(zip.toByteArray())).libraryImported)
+        assertEquals(3, db.libraryDao().count())
+    }
+
+    @Test
+    fun severalPagesAndSectionLinesOfARecordingAreRestored() = runBlocking {
+        val pages = listOf(draft("jpg", byteArrayOf(5)), draft("jpg", byteArrayOf(6)))
+        repository.create(draft("m4a", byteArrayOf(1)), TextAttachment.Photo(pages, startY = 0.2f, endY = 0.7f), 1L, 1L, RecordingParams())
+        val zip = ByteArrayOutputStream()
+        manager.export(zip)
+        openFreshDevice()
+        manager.import(ByteArrayInputStream(zip.toByteArray()))
+        val restored = db.recordingDao().getAll().single()
+        assertEquals(listOf<Byte>(5, 6), restored.photoPages.map { files.photo(it).readBytes().single() })
+        assertEquals(0.2f, restored.sectionStartY)
+        assertEquals(0.7f, restored.sectionEndY)
     }
 
     @Test

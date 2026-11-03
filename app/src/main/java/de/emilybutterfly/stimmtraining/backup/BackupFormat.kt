@@ -1,7 +1,12 @@
 package de.emilybutterfly.stimmtraining.backup
 
 import de.emilybutterfly.stimmtraining.data.Recording
+import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.data.document.DocumentKind
+import de.emilybutterfly.stimmtraining.data.joinPageNames
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
+import de.emilybutterfly.stimmtraining.data.library.LibraryText
+import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -13,19 +18,21 @@ class BackupException(message: String) : Exception(message)
  * Aufbau einer Sicherung (ZIP):
  *
  * ```
- * manifest.json      alle Aufnahmen mit ihren Parametern
+ * manifest.json      alle Aufnahmen mit ihren Parametern, seit Version 3 auch die Bibliothek
  * audio/<datei>      Audiodateien
- * photos/<datei>     Fotos der Texte
+ * photos/<datei>     Fotos der Texte (seit Version 3 mehrere Seiten pro Aufnahme)
  * documents/<datei>  Texte als Datei (PDF, Word, …), seit Version 2
+ * library/<datei>    Fotos und Dateien der Bibliothek, seit Version 3
  * ```
  */
 object BackupFormat {
     const val FORMAT = "stimmtraining-backup"
-    const val VERSION = 2
+    const val VERSION = 3
     const val MANIFEST = "manifest.json"
     const val AUDIO_DIR = "audio/"
     const val PHOTO_DIR = "photos/"
     const val DOCUMENT_DIR = "documents/"
+    const val LIBRARY_DIR = "library/"
 
     private val SAFE_FILE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
     private val SAFE_UUID = Regex("[A-Za-z0-9-]{8,64}")
@@ -33,7 +40,10 @@ object BackupFormat {
     /** Eine Aufnahme aus dem Manifest; Dateinamen sind relativ zu audio/, photos/ bzw. documents/. */
     data class Entry(val recording: Recording)
 
-    fun manifest(recordings: List<Recording>, createdAt: Long, appVersion: String): String {
+    /** Ein Text der Bibliothek aus dem Manifest; Dateinamen sind relativ zu library/. */
+    data class LibraryEntry(val text: LibraryText)
+
+    fun manifest(recordings: List<Recording>, createdAt: Long, appVersion: String, library: List<LibraryText> = emptyList()): String {
         val list = JSONArray()
         for (r in recordings) {
             list.put(
@@ -42,7 +52,8 @@ object BackupFormat {
                     .put("recordedAt", r.recordedAt)
                     .put("durationMs", r.durationMs)
                     .put("audio", AUDIO_DIR + r.audioFile)
-                    .put("photo", r.photoFile?.let { PHOTO_DIR + it } ?: JSONObject.NULL)
+                    .put("photos", JSONArray(r.photoPages.map { PHOTO_DIR + it }))
+                    .put("section", sectionJson(r))
                     .put("document", r.documentFile?.let { DOCUMENT_DIR + it } ?: JSONObject.NULL)
                     .put("documentName", r.documentName ?: JSONObject.NULL)
                     .put("pitch", pitchJson(r))
@@ -62,10 +73,90 @@ object BackupFormat {
             .put("createdAt", createdAt)
             .put("appVersion", appVersion)
             .put("recordings", list)
+            .put("library", JSONArray(library.map(::libraryJson)))
             .toString(2)
     }
 
-    fun parse(json: String): List<Entry> {
+    private fun sectionJson(r: Recording): Any =
+        if (r.sectionStartY == null && r.sectionEndY == null) {
+            JSONObject.NULL
+        } else {
+            JSONObject().put("startY", r.sectionStartY?.toDouble() ?: JSONObject.NULL).put("endY", r.sectionEndY?.toDouble() ?: JSONObject.NULL)
+        }
+
+    private fun libraryJson(t: LibraryText): JSONObject = JSONObject()
+        .put("uuid", t.uuid)
+        .put("title", t.title)
+        .put("tags", JSONArray(t.tagList))
+        .put("photos", JSONArray(t.photoPages.map { LIBRARY_DIR + it }))
+        .put("document", t.documentFile?.let { LIBRARY_DIR + it } ?: JSONObject.NULL)
+        .put("documentName", t.documentName ?: JSONObject.NULL)
+        .put("pinned", t.pinned)
+        .put("createdAt", t.createdAt)
+        .put("updatedAt", t.updatedAt)
+        .put("finishedAt", t.finishedAt ?: JSONObject.NULL)
+        .put("lastReadAt", t.lastReadAt ?: JSONObject.NULL)
+        .put(
+            "progress",
+            when (val p = t.progress) {
+                is ReadingPosition.InText -> JSONObject().put("offset", p.offset).put("anchor", p.anchor)
+                is ReadingPosition.OnPage -> JSONObject().put("page", p.page).put("y", p.y.toDouble()).put("pageName", p.pageName ?: JSONObject.NULL)
+                null -> JSONObject.NULL
+            },
+        )
+        .put("progressFraction", t.progressFraction?.toDouble() ?: JSONObject.NULL)
+
+    /** Die Texte der Bibliothek aus einer Sicherung (ältere Sicherungen haben keine). */
+    fun parseLibrary(json: String): List<LibraryEntry> {
+        val root = parseRoot(json)
+        val list = root.optJSONArray("library") ?: return emptyList()
+        return (0 until list.length()).mapNotNull { i -> list.optJSONObject(i)?.let(::parseLibraryEntry) }
+    }
+
+    private fun parseLibraryEntry(o: JSONObject): LibraryEntry? {
+        val photos = o.optJSONArray("photos")?.let { array ->
+            (0 until array.length()).mapNotNull { array.optString(it, null) }
+                .mapNotNull(::safeEntryName)
+                .filter { it.startsWith(LIBRARY_DIR) }
+                .map { it.removePrefix(LIBRARY_DIR) }
+                .take(TextAttachment.MAX_PAGES)
+        }.orEmpty()
+        val document = o.stringOrNull("document")?.let(::safeEntryName)?.takeIf { it.startsWith(LIBRARY_DIR) }?.removePrefix(LIBRARY_DIR)
+        val documentKind = document?.let { DocumentKind.fromExtension(it.substringAfterLast('.', "")) }
+        if (photos.isEmpty() && documentKind == null) return null
+        val uuid = o.stringOrNull("uuid")?.takeIf { SAFE_UUID.matches(it) } ?: UUID.randomUUID().toString()
+        val tags = o.optJSONArray("tags")?.let { array -> (0 until array.length()).mapNotNull { array.optString(it, null) } }.orEmpty()
+        val createdAt = o.optLong("createdAt", 0L)
+        val base = LibraryText(
+            uuid = uuid,
+            title = LibraryRepository.cleanTitle(o.stringOrNull("title")?.let(::cleanDisplayName).orEmpty()),
+            tags = LibraryText.joinTags(tags.map { it.replace(Regex("\\p{Cntrl}"), "") }.take(MAX_TAGS)),
+            photoFiles = if (documentKind != null) null else photos.joinPageNames(),
+            documentFile = document?.takeIf { documentKind != null },
+            documentName = documentKind?.let { kind -> o.stringOrNull("documentName")?.let(::cleanDisplayName) ?: "Text.${kind.extension}" },
+            pinned = o.optBoolean("pinned", false),
+            createdAt = createdAt,
+            updatedAt = o.optLong("updatedAt", createdAt),
+            finishedAt = o.longOrNull("finishedAt"),
+            lastReadAt = o.longOrNull("lastReadAt"),
+        )
+        val fraction = o.doubleOrNull("progressFraction")?.toFloat()?.takeIf { it in 0f..1f }
+        val progress = o.optJSONObject("progress")?.takeIf { base.finishedAt == null }?.let { p ->
+            val offset = p.intOrNull("offset")
+            val anchor = p.stringOrNull("anchor")?.take(MAX_ANCHOR)
+            val page = p.intOrNull("page")
+            val y = p.doubleOrNull("y")?.toFloat()
+            when {
+                offset != null && offset >= 0 && !anchor.isNullOrBlank() && base.documentFile != null -> ReadingPosition.InText(offset, anchor)
+                page != null && page >= 0 && y != null && y in 0f..1f ->
+                    ReadingPosition.OnPage(page, y, p.stringOrNull("pageName")?.takeIf { it in photos })
+                else -> null
+            }
+        }
+        return LibraryEntry(base.withProgress(progress, fraction))
+    }
+
+    private fun parseRoot(json: String): JSONObject {
         val root = try {
             JSONObject(json)
         } catch (_: JSONException) {
@@ -77,6 +168,11 @@ object BackupFormat {
         if (root.optInt("version", 0) > VERSION) {
             throw BackupException("Die Sicherung stammt aus einer neueren App-Version. Bitte zuerst die App aktualisieren.")
         }
+        return root
+    }
+
+    fun parse(json: String): List<Entry> {
+        val root = parseRoot(json)
         val list = root.optJSONArray("recordings") ?: JSONArray()
         return (0 until list.length()).mapNotNull { i -> list.optJSONObject(i)?.let(::parseEntry) }
     }
@@ -84,7 +180,16 @@ object BackupFormat {
     private fun parseEntry(o: JSONObject): Entry? {
         val audio = o.stringOrNull("audio")?.let(::safeEntryName)?.takeIf { it.startsWith(AUDIO_DIR) }
             ?: return null
-        val photo = o.stringOrNull("photo")?.let(::safeEntryName)?.takeIf { it.startsWith(PHOTO_DIR) }
+        // Seit Version 3 eine Liste von Seiten, davor genau ein Foto.
+        val photos = (
+            o.optJSONArray("photos")?.let { array -> (0 until array.length()).mapNotNull { array.optString(it, null) } }
+                ?: listOfNotNull(o.stringOrNull("photo"))
+            )
+            .mapNotNull(::safeEntryName)
+            .filter { it.startsWith(PHOTO_DIR) }
+            .map { it.removePrefix(PHOTO_DIR) }
+            .take(TextAttachment.MAX_PAGES)
+        val section = o.optJSONObject("section")
         val document = o.stringOrNull("document")?.let(::safeEntryName)
             ?.takeIf { it.startsWith(DOCUMENT_DIR) }
             ?.removePrefix(DOCUMENT_DIR)
@@ -95,8 +200,10 @@ object BackupFormat {
             recordedAt = o.optLong("recordedAt", 0L),
             durationMs = o.optLong("durationMs", 0L),
             audioFile = audio.removePrefix(AUDIO_DIR),
-            photoFile = photo?.removePrefix(PHOTO_DIR),
+            photoFile = photos.joinPageNames(),
             documentFile = document?.takeIf { documentKind != null },
+            sectionStartY = section?.doubleOrNull("startY")?.toFloat()?.takeIf { it in 0f..1f && photos.isNotEmpty() },
+            sectionEndY = section?.doubleOrNull("endY")?.toFloat()?.takeIf { it in 0f..1f && photos.isNotEmpty() },
             documentName = documentKind?.let { kind ->
                 o.stringOrNull("documentName")?.let(::cleanDisplayName) ?: "Text.${kind.extension}"
             },
@@ -143,6 +250,7 @@ object BackupFormat {
             name.startsWith(AUDIO_DIR) -> AUDIO_DIR
             name.startsWith(PHOTO_DIR) -> PHOTO_DIR
             name.startsWith(DOCUMENT_DIR) -> DOCUMENT_DIR
+            name.startsWith(LIBRARY_DIR) -> LIBRARY_DIR
             else -> return null
         }
         val file = name.removePrefix(dir)
@@ -158,4 +266,13 @@ object BackupFormat {
 
     private fun JSONObject.intOrNull(name: String): Int? =
         if (isNull(name)) null else optInt(name, Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
+
+    private fun JSONObject.longOrNull(name: String): Long? =
+        if (isNull(name)) null else optLong(name, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }
+
+    private fun JSONObject.doubleOrNull(name: String): Double? =
+        if (isNull(name)) null else optDouble(name, Double.NaN).takeIf { !it.isNaN() }
+
+    private const val MAX_TAGS = 30
+    private const val MAX_ANCHOR = 300
 }

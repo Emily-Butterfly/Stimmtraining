@@ -13,6 +13,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import de.emilybutterfly.stimmtraining.StimmtrainingApp
 import de.emilybutterfly.stimmtraining.data.RecordingDao
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -28,6 +29,7 @@ class AutoBackup(
     private val context: Context,
     private val manager: BackupManager,
     private val dao: RecordingDao,
+    private val library: LibraryRepository,
     private val settings: BackupSettings,
 ) {
     /** Liefert false, wenn die Sicherung fehlgeschlagen ist und wiederholt werden sollte. */
@@ -37,9 +39,9 @@ class AutoBackup(
             settings.recordFailure(System.currentTimeMillis(), "Kein Backup-Ordner gewählt.")
             return true
         }
-        val fingerprint = dao.fingerprint()
+        val fingerprint = dao.fingerprint() + "|" + library.fingerprint()
         if (!force && fingerprint == settings.lastFingerprint) return true // nichts Neues
-        if (dao.count() == 0) {
+        if (dao.count() == 0 && library.count() == 0) {
             // Z. B. nach einer Neuinstallation: eine leere Sicherung würde echte verdrängen.
             if (force) settings.recordFailure(System.currentTimeMillis(), "Noch keine Aufnahmen – es gibt nichts zu sichern.")
             return true
@@ -53,7 +55,7 @@ class AutoBackup(
             val document = tree.createFile("application/zip", "$FILE_PREFIX$stamp.zip")
                 ?: throw IOException("Die Backup-Datei konnte nicht angelegt werden.")
             val count = try {
-                BackupManager.openForWriting(context.contentResolver, document.uri).use { manager.export(it) }
+                BackupManager.openForWriting(context.contentResolver, document.uri).use { manager.export(it) }.recordings
             } catch (e: Exception) {
                 document.delete()
                 throw e

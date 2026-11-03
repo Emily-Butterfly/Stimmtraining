@@ -55,7 +55,8 @@ class AppSmokeTest {
         text("Text zum Lesen").performScrollTo().assertExists()
         compose.onNodeWithContentDescription("Zurück").performClick()
 
-        compose.onNodeWithContentDescription("Backup").performClick()
+        compose.onNodeWithContentDescription("Mehr").performClick()
+        text("Backup").performClick()
         text("Sicherung als Datei").assertExists()
         text("Automatisches Backup").performScrollTo().assertExists()
         compose.onNodeWithContentDescription("Zurück").performClick()
@@ -140,7 +141,8 @@ class AppSmokeTest {
         compose.onAllNodes(hasContentDescription("Tonhöhen-Verlauf")).assertCountEquals(0)
 
         // In den Einstellungen wieder einblenden.
-        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        compose.onNodeWithContentDescription("Mehr").performClick()
+        text("Einstellungen").performClick()
         text("Sanfter Modus").performClick()
         assertEquals(false, container.settings.gentleMode.value)
         compose.onNodeWithContentDescription("Zurück").performClick()
