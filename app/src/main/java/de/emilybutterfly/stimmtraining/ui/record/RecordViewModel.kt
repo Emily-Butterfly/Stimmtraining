@@ -145,6 +145,12 @@ class RecordViewModel(
     private var importJob: Job? = null
     private var libraryJob: Job? = null
 
+    /**
+     * Solange ein gesicherter Bibliothekstext noch geladen wird, bleibt sein gesicherter Stand
+     * stehen. Muss vor dem init-Block stehen: Das Sichern beginnt dort sofort.
+     */
+    private var restoringLibrary = savedState.get<Long>(KEY_LIBRARY_ID) != null
+
     init {
         // Entwurf sichern, damit er überlebt, wenn Android die App im Hintergrund beendet
         // (z. B. während die Kamera-App offen ist).
@@ -292,9 +298,6 @@ class RecordViewModel(
 
     // --- Text aus der Bibliothek ---
 
-    /** Solange ein gesicherter Bibliothekstext noch geladen wird, bleibt sein gesicherter Stand stehen. */
-    private var restoringLibrary = false
-
     /** Nach einem Neustart durch Android: den gewählten Text samt angetippter Stelle wieder laden. */
     private fun restoreLibrary() {
         val saved = savedState.get<Long>(KEY_LIBRARY_ID)
@@ -306,7 +309,6 @@ class RecordViewModel(
                 } ?: savedState.get<Int>(KEY_LIBRARY_END_PAGE)?.let { page ->
                     savedState.get<Float>(KEY_LIBRARY_END_Y)?.let { ReadingPosition.OnPage(page, it, savedState[KEY_LIBRARY_END_PAGE_NAME]) }
                 }
-                restoringLibrary = true
                 loadLibraryText(saved, end) { restoringLibrary = false }
             }
             fromArgument != null -> {

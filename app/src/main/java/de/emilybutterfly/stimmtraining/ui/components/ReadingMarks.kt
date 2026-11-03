@@ -118,7 +118,11 @@ class TextReading(
     /** Ein Tipp auf Zeichen [local] von [shown]: der Satz dort ist der zuletzt gelesene. */
     fun tap(shown: ShownBlock, local: Int) {
         val onMark = marks.onMark ?: return
-        val offset = layout.blockStarts[shown.index] + shown.from + local
+        val blockStart = layout.blockStarts[shown.index]
+        var offset = blockStart + shown.from + local
+        // Hinter dem Zeilenende oder auf Leerraum getippt: gemeint ist der Satz davor, nicht der nächste.
+        val text = layout.plainText
+        if (offset > blockStart && (offset >= text.length || text[offset].isWhitespace())) offset--
         // Schon früher Gelesenes (blass) zählt nicht.
         if (!marks.showAll && marks.start != null && offset < startOffset) return
         val sentence = layout.sentenceAt(offset) ?: return

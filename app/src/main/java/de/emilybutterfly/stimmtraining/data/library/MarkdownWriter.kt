@@ -20,6 +20,8 @@ import de.emilybutterfly.stimmtraining.data.document.TextDocumentBuilder
  *   Ebene 0. Aufzählungszeichen außer „1.“, „2.“ … werden zu „•“.
  * - Ein Listenabsatz ohne Aufzählungszeichen und ohne Listenpunkt davor wird ein normaler Absatz.
  * - Fett/kursiv auf Leerraum am Rand einer Hervorhebung entfällt (`**fett** ` statt `**fett **`).
+ * - Selten, etwa wenn kursiv mitten im Wort an einem Satzzeichen neu beginnt, während fett
+ *   weiterläuft, bleibt ein Absatz ganz ohne Hervorhebung; sein Text bleibt immer erhalten.
  * - Absätze mit Zeilenumbrüchen teilt der Leser hinter [TextDocumentBuilder.LONG_BLOCK_CHARS]
  *   Zeichen an einem Umbruch, wie beim ersten Einlesen.
  * - Das Steuerzeichen U+0085 in Überschriften und der ersten Zeile eines Listenpunkts.
@@ -128,8 +130,9 @@ object MarkdownWriter {
             val kind = if (inText) kind(text, i, lineStart, escapedMarker) else LITERAL
             if (flags != null) {
                 val previous = if (i > 0) flags[i - 1] else 0
+                if (inText && text[i].isWhitespace()) avoidReopeningAtWhitespace(text, flags, i, open, previous)
                 val next = if (inText) flags[i] else 0
-                if (previous != next) emphasis(out, open, previous, next, if (inText) firstChar(kind, text[i], heading) else ' ')
+                if (previous != next) emphasis(out, open, previous, next, if (inText) firstChar(kind, text[i], heading) else ' ', flags, i)
             }
             if (inText) append(out, kind, text[i], heading)
         }
@@ -208,12 +211,39 @@ object MarkdownWriter {
     }
 
     /**
-     * Schreibt die Hervorhebungszeichen für den Wechsel von [previous] zu [next] vor das Zeichen, das
-     * mit [after] beginnt. Geschlossen wird in umgekehrter Reihenfolge des Öffnens ([open]); was dabei
-     * zu früh endet, wird gleich wieder geöffnet. Würde Markdown ein Zeichen wegen seiner Nachbarn
-     * nicht als Beginn oder Ende erkennen (`Wort*(kursiv)*`, `*un*möglich`), trennt es ein leerer Kommentar.
+     * Endet an Leerraum [position] eine Hervorhebung, über der eine andere geöffnet ist, die weitergeht
+     * (`**fett *beides** kursiv*`), müsste diese vor dem Leerraum neu beginnen – das erkennt Markdown
+     * nicht. Sie endet dann mit und beginnt erst am nächsten sichtbaren Zeichen wieder.
      */
-    private fun emphasis(out: StringBuilder, open: MutableList<Int>, previous: Int, next: Int, after: Char) {
+    private fun avoidReopeningAtWhitespace(text: String, flags: IntArray, position: Int, open: List<Int>, previous: Int) {
+        val ending = previous and flags[position].inv()
+        val lowest = open.indexOfFirst { (it and ending) != 0 }
+        if (lowest < 0) return
+        var reopened = 0
+        for (k in lowest + 1 until open.size) if ((open[k] and ending) == 0) reopened = reopened or open[k]
+        var i = position
+        while (reopened != 0 && i < text.length && text[i].isWhitespace()) {
+            flags[i] = flags[i] and reopened.inv()
+            i++
+        }
+    }
+
+    /** Erste Position ab [start] ohne [attribute]. */
+    private fun runEnd(flags: IntArray, start: Int, attribute: Int): Int {
+        var i = start
+        while (i < flags.size && (flags[i] and attribute) != 0) i++
+        return i
+    }
+
+    /**
+     * Schreibt die Hervorhebungszeichen für den Wechsel von [previous] zu [next] bei [position], vor dem
+     * Zeichen, das mit [after] beginnt. Geschlossen wird in umgekehrter Reihenfolge des Öffnens ([open]);
+     * was dabei zu früh endet, wird gleich wieder geöffnet. Beginnen beide zugleich, kommt die länger
+     * dauernde nach außen, damit sie nicht neu geöffnet werden muss. Würde Markdown ein Zeichen wegen
+     * seiner Nachbarn nicht als Beginn oder Ende erkennen (`Wort*(kursiv)*`, `*un*möglich`), trennt es
+     * ein leerer Kommentar.
+     */
+    private fun emphasis(out: StringBuilder, open: MutableList<Int>, previous: Int, next: Int, after: Char, flags: IntArray, position: Int) {
         val ending = previous and next.inv()
         val closers = StringBuilder()
         val reopened = ArrayList<Int>(2)
@@ -222,9 +252,10 @@ object MarkdownWriter {
             closers.append(mark(attribute))
             if ((attribute and ending) == 0) reopened.add(0, attribute)
         }
-        val starting = next and previous.inv()
+        var starting = listOf(BOLD, ITALIC).filter { (next and previous.inv() and it) != 0 }
+        if (starting.size > 1) starting = starting.sortedByDescending { runEnd(flags, position, it) }
         val openers = StringBuilder()
-        for (attribute in reopened + listOf(BOLD, ITALIC).filter { (starting and it) != 0 }) {
+        for (attribute in reopened + starting) {
             open += attribute
             openers.append(mark(attribute))
         }
