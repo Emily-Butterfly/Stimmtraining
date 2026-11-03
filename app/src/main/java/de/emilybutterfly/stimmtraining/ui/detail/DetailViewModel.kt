@@ -15,14 +15,17 @@ import de.emilybutterfly.stimmtraining.data.AttachmentChange
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.pageNames
+import de.emilybutterfly.stimmtraining.ui.DraftPages
 import de.emilybutterfly.stimmtraining.ui.app
 import de.emilybutterfly.stimmtraining.ui.createDraftText
 import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
 import de.emilybutterfly.stimmtraining.ui.importDraftDocument
-import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
+import de.emilybutterfly.stimmtraining.ui.importDraftPhotos
 import de.emilybutterfly.stimmtraining.ui.importFailureMessage
 import de.emilybutterfly.stimmtraining.ui.openWithChooser
+import de.emilybutterfly.stimmtraining.ui.pageFailureMessage
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
 import kotlinx.coroutines.CancellationException
@@ -94,19 +97,19 @@ class DetailViewModel(
             AttachmentChange.Remove -> "remove"
             is AttachmentChange.Replace -> "replace"
         }
-        savedState[KEY_ATTACHMENT_DRAFT] = replacement?.file?.absolutePath
+        savedState[KEY_ATTACHMENT_DRAFT] = replacement?.files?.joinToString("\n") { it.absolutePath }
         // Nur bei Dateien gesetzt; daran erkennt die Wiederherstellung Foto oder Datei.
         savedState[KEY_ATTACHMENT_NAME] = (replacement as? TextAttachment.Document)?.name
     }
 
     private fun restoreEdit(): EditState? {
         if (savedState.get<Boolean>(KEY_EDITING) != true) return null
-        val draft = savedState.get<String>(KEY_ATTACHMENT_DRAFT)?.let(::File)?.takeIf { it.isFile }
+        val drafts = savedState.get<String>(KEY_ATTACHMENT_DRAFT).pageNames().map(::File).filter { it.isFile }
         val name = savedState.get<String>(KEY_ATTACHMENT_NAME)
         val change = when (savedState.get<String>(KEY_ATTACHMENT_MODE)) {
             "remove" -> AttachmentChange.Remove
-            "replace" -> draft
-                ?.let { if (name != null) TextAttachment.Document(it, name) else TextAttachment.Photo(it) }
+            "replace" -> drafts.takeIf { it.isNotEmpty() }
+                ?.let { if (name != null) TextAttachment.Document(it.first(), name) else TextAttachment.Photo(it) }
                 ?.let { AttachmentChange.Replace(it) }
                 ?: AttachmentChange.Keep
             else -> AttachmentChange.Keep
@@ -151,9 +154,99 @@ class DetailViewModel(
 
     fun cameraTarget(): Uri = files.prepareCameraCapture()
 
-    fun onCameraPhoto() = importAttachment(isPhoto = true) { TextAttachment.Photo(files.importCameraCapture(app)) }
+    fun onCameraPhoto(addPage: Boolean = false) {
+        if (addPage) {
+            addPages { listOf(files.importCameraCapture(app)) }
+        } else {
+            importAttachment(isPhoto = true) { TextAttachment.Photo(files.importCameraCapture(app)) }
+        }
+    }
 
-    fun onPhotoPicked(uri: Uri) = importAttachment(isPhoto = true) { TextAttachment.Photo(files.importDraftPhoto(app, uri)) }
+    fun onPhotosPicked(uris: List<Uri>, addPage: Boolean = false) {
+        if (uris.isEmpty()) return
+        val limited = uris.take(TextAttachment.MAX_PAGES)
+        if (addPage) {
+            addPages { files.importDraftPhotos(app, limited) }
+        } else {
+            importAttachment(isPhoto = true) { DraftPages.append(null, files.importDraftPhotos(app, limited)).first }
+        }
+        if (uris.size > limited.size) _message.value = TOO_MANY_PAGES
+    }
+
+    /**
+     * Die Fotoseiten zum Bearbeiten. Gespeicherte Seiten werden dafür erst in Entwürfe kopiert:
+     * Bis „Speichern“ bleibt das Original unangetastet, „Abbrechen“ verwirft alles.
+     */
+    private suspend fun editablePhoto(): TextAttachment.Photo? {
+        val edit = _edit.value ?: return null
+        (edit.attachmentChange as? AttachmentChange.Replace)?.attachment?.let { return it as? TextAttachment.Photo }
+        if (edit.attachmentChange != AttachmentChange.Keep) return null
+        val stored = current?.let(::attachment) as? TextAttachment.Photo ?: return null
+        val copy = DraftPages.copyToDrafts(files, stored)
+        if (_edit.value == null) {
+            copy.pages.forEach { it.delete() }
+            return null
+        }
+        _edit.update { it?.copy(attachmentChange = AttachmentChange.Replace(copy)) }
+        return copy
+    }
+
+    /**
+     * Ändert die Seiten im Hintergrund; währenddessen ist der Text gesperrt. Mit [requirePhoto]
+     * passiert nichts, wenn gerade keine Fotos angehängt sind (z. B. ein Dokument).
+     */
+    private fun changePages(
+        requirePhoto: Boolean,
+        isPhoto: Boolean = false,
+        change: suspend (TextAttachment.Photo?) -> TextAttachment?,
+    ) {
+        val edit = _edit.value ?: return
+        val recording = current ?: return
+        if (edit.attachmentBusy) return
+        if (requirePhoto && editedAttachment(recording, edit) !is TextAttachment.Photo) return
+        viewModelScope.launch {
+            _edit.update { it?.copy(attachmentBusy = true) }
+            try {
+                val photo = editablePhoto()
+                if (requirePhoto && photo == null) {
+                    _edit.update { it?.copy(attachmentBusy = false) }
+                    return@launch
+                }
+                val changed = change(photo)
+                if (_edit.value == null) {
+                    changed?.files?.forEach { it.delete() }
+                } else {
+                    _edit.update {
+                        it?.copy(
+                            attachmentChange = changed?.let(AttachmentChange::Replace) ?: AttachmentChange.Remove,
+                            attachmentBusy = false,
+                        )
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _edit.update { it?.copy(attachmentBusy = false) }
+                _message.value = if (isPhoto) importFailureMessage(isPhoto = true, e) else pageFailureMessage(e)
+            }
+        }
+    }
+
+    private fun addPages(load: suspend () -> List<File>) = changePages(requirePhoto = false, isPhoto = true) { photo ->
+        val added = load()
+        if (photo == null) discardAttachmentDraft()
+        val (result, dropped) = DraftPages.append(photo, added)
+        if (dropped > 0) _message.value = TOO_MANY_PAGES
+        result
+    }
+
+    fun rotatePage(index: Int, clockwise: Boolean) = changePages(requirePhoto = true) { photo ->
+        photo?.let { DraftPages.rotate(files, it, index, clockwise) }
+    }
+
+    fun movePage(from: Int, to: Int) = changePages(requirePhoto = true) { photo -> photo?.let { DraftPages.move(it, from, to) } }
+
+    fun deletePage(index: Int) = changePages(requirePhoto = true) { photo -> photo?.let { DraftPages.delete(it, index) } }
 
     fun onDocumentPicked(uri: Uri) = importAttachment(isPhoto = false) { files.importDraftDocument(app, uri) }
 
@@ -170,7 +263,7 @@ class DetailViewModel(
                 val attachment = load()
                 discardAttachmentDraft()
                 if (_edit.value == null) {
-                    attachment.file.delete()
+                    attachment.files.forEach { it.delete() }
                 } else {
                     _edit.update { it?.copy(attachmentChange = AttachmentChange.Replace(attachment), attachmentBusy = false) }
                 }
@@ -187,7 +280,7 @@ class DetailViewModel(
     }
 
     private fun discardAttachmentDraft() {
-        (_edit.value?.attachmentChange as? AttachmentChange.Replace)?.attachment?.file?.delete()
+        (_edit.value?.attachmentChange as? AttachmentChange.Replace)?.attachment?.files?.forEach { it.delete() }
     }
 
     fun openExternally(document: TextAttachment.Document, onReady: (Intent) -> Unit) {
@@ -279,6 +372,7 @@ class DetailViewModel(
     }
 
     companion object {
+        private const val TOO_MANY_PAGES = "Mehr als ${TextAttachment.MAX_PAGES} Seiten passen nicht – die übrigen wurden nicht übernommen."
         private const val KEY_EDITING = "editing"
         private const val KEY_PARAMS = "edit"
         private const val KEY_ATTACHMENT_MODE = "attachmentMode"

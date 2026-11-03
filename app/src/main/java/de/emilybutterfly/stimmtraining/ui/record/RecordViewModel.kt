@@ -18,14 +18,17 @@ import de.emilybutterfly.stimmtraining.data.Exercise
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.RecordingParams
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.pageNames
+import de.emilybutterfly.stimmtraining.ui.DraftPages
 import de.emilybutterfly.stimmtraining.ui.app
 import de.emilybutterfly.stimmtraining.ui.createDraftText
 import de.emilybutterfly.stimmtraining.ui.getParams
 import de.emilybutterfly.stimmtraining.ui.importCameraCapture
 import de.emilybutterfly.stimmtraining.ui.importDraftDocument
-import de.emilybutterfly.stimmtraining.ui.importDraftPhoto
+import de.emilybutterfly.stimmtraining.ui.importDraftPhotos
 import de.emilybutterfly.stimmtraining.ui.importFailureMessage
 import de.emilybutterfly.stimmtraining.ui.openWithChooser
+import de.emilybutterfly.stimmtraining.ui.pageFailureMessage
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
 import kotlinx.coroutines.CancellationException
@@ -182,7 +185,7 @@ class RecordViewModel(
         return Persistable(
             params = state.params,
             initialParams = state.initialParams,
-            photo = (state.attachment as? TextAttachment.Photo)?.file?.absolutePath,
+            photo = (state.attachment as? TextAttachment.Photo)?.pages?.joinToString("\n") { it.absolutePath },
             document = (state.attachment as? TextAttachment.Document)?.file?.absolutePath,
             documentName = (state.attachment as? TextAttachment.Document)?.name,
             audio = if (done) state.audio?.absolutePath else null,
@@ -233,7 +236,8 @@ class RecordViewModel(
         savedState.get<String>(KEY_DOCUMENT)?.let(::File)?.takeIf { it.isFile }?.let { file ->
             return TextAttachment.Document(file, savedState.get<String>(KEY_DOCUMENT_NAME) ?: file.name)
         }
-        return savedState.get<String>(KEY_PHOTO)?.let(::File)?.takeIf { it.isFile }?.let { TextAttachment.Photo(it) }
+        val pages = savedState.get<String>(KEY_PHOTO).pageNames().map(::File).filter { it.isFile }
+        return if (pages.isEmpty()) null else TextAttachment.Photo(pages)
     }
 
     fun updateParams(params: RecordingParams) = _state.update { it.copy(params = params) }
@@ -242,9 +246,76 @@ class RecordViewModel(
 
     fun cameraTarget(): Uri = container.files.prepareCameraCapture()
 
-    fun onCameraPhoto() = importAttachment(isPhoto = true) { TextAttachment.Photo(container.files.importCameraCapture(app)) }
+    /** Ein Kamerafoto ersetzt den Text oder kommt mit [addPage] als weitere Seite dazu. */
+    fun onCameraPhoto(addPage: Boolean = false) {
+        if (addPage) {
+            addPages { listOf(container.files.importCameraCapture(app)) }
+        } else {
+            importAttachment(isPhoto = true) { TextAttachment.Photo(container.files.importCameraCapture(app)) }
+        }
+    }
 
-    fun onPhotoPicked(uri: Uri) = importAttachment(isPhoto = true) { TextAttachment.Photo(container.files.importDraftPhoto(app, uri)) }
+    /** Bilder aus der Galerie, in der gewählten Reihenfolge. */
+    fun onPhotosPicked(uris: List<Uri>, addPage: Boolean = false) {
+        if (uris.isEmpty()) return
+        // Mehr als in einen Anhang passt, wird gar nicht erst übernommen.
+        val limited = uris.take(TextAttachment.MAX_PAGES)
+        if (addPage) {
+            addPages { container.files.importDraftPhotos(app, limited) }
+        } else {
+            importAttachment(isPhoto = true) { DraftPages.append(null, container.files.importDraftPhotos(app, limited)).first }
+        }
+        if (uris.size > limited.size) _state.update { it.copy(message = TOO_MANY_PAGES) }
+    }
+
+    private fun addPages(load: suspend () -> List<File>) {
+        importJob = viewModelScope.launch {
+            _state.update { it.copy(attachmentBusy = true) }
+            try {
+                val added = load()
+                val current = _state.value.attachment
+                val (photo, dropped) = if (current is TextAttachment.Photo) {
+                    DraftPages.append(current, added)
+                } else {
+                    current?.files?.forEach { it.delete() }
+                    DraftPages.append(null, added)
+                }
+                _state.update {
+                    it.copy(attachment = photo, attachmentBusy = false, message = if (dropped > 0) TOO_MANY_PAGES else it.message)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(attachmentBusy = false, message = importFailureMessage(isPhoto = true, e)) }
+            }
+        }
+    }
+
+    fun rotatePage(index: Int, clockwise: Boolean) {
+        val photo = _state.value.attachment as? TextAttachment.Photo ?: return
+        if (_state.value.attachmentBusy) return
+        importJob = viewModelScope.launch {
+            _state.update { it.copy(attachmentBusy = true) }
+            try {
+                val rotated = DraftPages.rotate(container.files, photo, index, clockwise)
+                _state.update { it.copy(attachment = rotated, attachmentBusy = false) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(attachmentBusy = false, message = pageFailureMessage(e)) }
+            }
+        }
+    }
+
+    fun movePage(from: Int, to: Int) {
+        val photo = _state.value.attachment as? TextAttachment.Photo ?: return
+        if (!_state.value.attachmentBusy) _state.update { it.copy(attachment = DraftPages.move(photo, from, to)) }
+    }
+
+    fun deletePage(index: Int) {
+        val photo = _state.value.attachment as? TextAttachment.Photo ?: return
+        if (!_state.value.attachmentBusy) _state.update { it.copy(attachment = DraftPages.delete(photo, index)) }
+    }
 
     fun onDocumentPicked(uri: Uri) = importAttachment(isPhoto = false) { container.files.importDraftDocument(app, uri) }
 
@@ -260,7 +331,7 @@ class RecordViewModel(
                 val attachment = load()
                 val previous = _state.value.attachment
                 _state.update { it.copy(attachment = attachment, attachmentBusy = false) }
-                previous?.file?.delete()
+                previous?.files?.forEach { it.delete() }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -270,7 +341,7 @@ class RecordViewModel(
     }
 
     fun removeAttachment() {
-        _state.value.attachment?.file?.delete()
+        _state.value.attachment?.files?.forEach { it.delete() }
         _state.update { it.copy(attachment = null) }
     }
 
@@ -562,6 +633,8 @@ class RecordViewModel(
         internal const val KEY_PITCH_MOST = "pitchMost"
         internal const val KEY_PITCH_LOW = "pitchLow"
         internal const val KEY_PITCH_HIGH = "pitchHigh"
+
+        private const val TOO_MANY_PAGES = "Mehr als ${TextAttachment.MAX_PAGES} Seiten passen nicht – die übrigen wurden nicht übernommen."
 
         /** Darunter lohnt keine Aufnahme mehr: etwa eine Minute. */
         private const val MIN_RECORDING_BYTES = FileStore.AUDIO_BYTES_PER_MINUTE

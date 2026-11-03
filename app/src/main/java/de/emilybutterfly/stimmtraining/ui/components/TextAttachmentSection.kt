@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -39,6 +41,8 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.ViewCarousel
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -96,7 +100,9 @@ import java.io.File
  * ersetzen, bearbeiten (eingefügte Texte und Textdateien) oder entfernen.
  *
  * [cameraTarget] liefert die Content-URI, in die die Kamera-App schreiben soll;
- * [onCameraResult] wird aufgerufen, sobald dort ein Foto liegt. [onTextPasted] bekommt den
+ * [onCameraResult] wird aufgerufen, sobald dort ein Foto liegt – mit `addPage`, wenn es als
+ * weitere Seite dazukommt statt den Text zu ersetzen; ebenso [onPhotosPicked] für Bilder aus der
+ * Galerie. [onRotatePage], [onMovePage] und [onDeletePage] ändern einzelne Fotoseiten. [onTextPasted] bekommt den
  * Text und den Namen, unter dem er erscheinen soll (null: aus der ersten Zeile). [onExpand] öffnet den Text
  * groß zum Lesen. Mit [enabled] = false lässt sich nichts ändern und keine andere App öffnen
  * (z. B. während einer Aufnahme, die sonst im Hintergrund enden würde); lesen geht weiter.
@@ -107,8 +113,11 @@ fun TextAttachmentSection(
     busy: Boolean,
     reader: ReaderSettings,
     cameraTarget: () -> Uri,
-    onCameraResult: () -> Unit,
-    onPhotoPicked: (Uri) -> Unit,
+    onCameraResult: (addPage: Boolean) -> Unit,
+    onPhotosPicked: (uris: List<Uri>, addPage: Boolean) -> Unit,
+    onRotatePage: (index: Int, clockwise: Boolean) -> Unit,
+    onMovePage: (from: Int, to: Int) -> Unit,
+    onDeletePage: (index: Int) -> Unit,
     onDocumentPicked: (Uri) -> Unit,
     onTextPasted: (text: String, name: String?) -> Unit,
     onRemove: () -> Unit,
@@ -121,24 +130,58 @@ fun TextAttachmentSection(
 ) {
     val context = LocalContext.current
     val canChange = enabled && !busy
-    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        if (ok) onCameraResult()
+    val photo = attachment as? TextAttachment.Photo
+    val pageCount = photo?.pages?.size ?: 0
+    // Gespeichert, weil Android die App beenden kann, während Kamera oder Galerie offen sind.
+    var addingPage by rememberSaveable { mutableStateOf(false) }
+    // Nach einem Kamerafoto fragen, ob noch eine Seite kommt – erst wenn es übernommen ist,
+    // erkennbar an einer neuen letzten Seite. Scheitert die Übernahme, wird nicht gefragt.
+    var awaitingCamera by rememberSaveable { mutableStateOf(false) }
+    var sawImport by rememberSaveable { mutableStateOf(false) }
+    var lastPageBeforeCamera by rememberSaveable { mutableStateOf<String?>(null) }
+    var askNextPage by rememberSaveable { mutableStateOf(false) }
+    var showPages by rememberSaveable { mutableStateOf(false) }
+    val lastPage = photo?.pages?.lastOrNull()?.path
+    LaunchedEffect(busy, lastPage, awaitingCamera) {
+        if (!awaitingCamera) return@LaunchedEffect
+        when {
+            lastPage != null && lastPage != lastPageBeforeCamera -> {
+                awaitingCamera = false
+                sawImport = false
+                askNextPage = true
+            }
+            busy -> sawImport = true
+            sawImport -> {
+                awaitingCamera = false
+                sawImport = false
+            }
+        }
     }
-    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) onPhotoPicked(uri)
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) {
+            lastPageBeforeCamera = lastPage
+            sawImport = false
+            awaitingCamera = true
+            onCameraResult(addingPage)
+        }
+    }
+    val pickImages = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(TextAttachment.MAX_PAGES)) { uris ->
+        if (uris.isNotEmpty()) onPhotosPicked(uris, addingPage)
     }
     val pickDocument = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onDocumentPicked(uri)
     }
-    val openCamera = {
+    val openCamera = { addPage: Boolean ->
+        addingPage = addPage && photo != null
         try {
             takePicture.launch(cameraTarget())
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(context, "Keine Kamera-App gefunden.", Toast.LENGTH_SHORT).show()
         }
     }
-    val openGallery = {
-        pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    val openGallery = { addPage: Boolean ->
+        addingPage = addPage && photo != null
+        pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
     val openFile = {
         try {
@@ -158,7 +201,7 @@ fun TextAttachmentSection(
     // Übernommener Text bleibt hier, bis er wirklich gespeichert ist (der Anhang wechselt).
     // Scheitert das Speichern, öffnen „Einfügen“ und „Bearbeiten“ ihn wieder.
     var pendingFor by rememberSaveable { mutableStateOf<String?>(null) }
-    val currentFile = attachment?.file?.path.orEmpty()
+    val currentFile = attachment?.files?.firstOrNull()?.path.orEmpty()
     LaunchedEffect(currentFile) {
         if (pendingFor != null && pendingFor != currentFile) {
             pendingFor = null
@@ -213,10 +256,10 @@ fun TextAttachmentSection(
                     )
                     val padding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(onClick = openCamera, enabled = canChange, contentPadding = padding, modifier = Modifier.weight(1f)) {
+                        FilledTonalButton(onClick = { openCamera(false) }, enabled = canChange, contentPadding = padding, modifier = Modifier.weight(1f)) {
                             ButtonLabel(Icons.Outlined.PhotoCamera, "Kamera")
                         }
-                        OutlinedButton(onClick = openGallery, enabled = canChange, contentPadding = padding, modifier = Modifier.weight(1f)) {
+                        OutlinedButton(onClick = { openGallery(false) }, enabled = canChange, contentPadding = padding, modifier = Modifier.weight(1f)) {
                             ButtonLabel(Icons.Outlined.Image, "Galerie")
                         }
                     }
@@ -239,7 +282,38 @@ fun TextAttachmentSection(
                 documentListState = documentListState,
                 documentContent = documentContent,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (photo != null) {
+                    TextButton(onClick = { showPages = true }, enabled = canChange) {
+                        ButtonLabel(Icons.Outlined.ViewCarousel, if (pageCount == 1) "Drehen" else "Seiten ($pageCount)")
+                    }
+                    if (pageCount < TextAttachment.MAX_PAGES) {
+                        var addMenu by remember { mutableStateOf(false) }
+                        Box {
+                            TextButton(onClick = { addMenu = true }, enabled = canChange) {
+                                ButtonLabel(Icons.Outlined.AddPhotoAlternate, "Seite")
+                            }
+                            DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Seite fotografieren") },
+                                    leadingIcon = { Icon(Icons.Outlined.PhotoCamera, contentDescription = null) },
+                                    onClick = {
+                                        addMenu = false
+                                        openCamera(true)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Seiten aus der Galerie") },
+                                    leadingIcon = { Icon(Icons.Outlined.Image, contentDescription = null) },
+                                    onClick = {
+                                        addMenu = false
+                                        openGallery(true)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
                 var menu by remember { mutableStateOf(false) }
                 Box {
                     TextButton(onClick = { menu = true }, enabled = canChange) {
@@ -251,7 +325,7 @@ fun TextAttachmentSection(
                             leadingIcon = { Icon(Icons.Outlined.PhotoCamera, contentDescription = null) },
                             onClick = {
                                 menu = false
-                                openCamera()
+                                openCamera(false)
                             },
                         )
                         DropdownMenuItem(
@@ -259,7 +333,7 @@ fun TextAttachmentSection(
                             leadingIcon = { Icon(Icons.Outlined.Image, contentDescription = null) },
                             onClick = {
                                 menu = false
-                                openGallery()
+                                openGallery(false)
                             },
                         )
                         DropdownMenuItem(
@@ -291,6 +365,30 @@ fun TextAttachmentSection(
             }
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+    }
+
+    if (askNextPage) {
+        NextPageDialog(
+            pageCount = pageCount,
+            onNextPage = {
+                askNextPage = false
+                openCamera(true)
+            },
+            onDone = { askNextPage = false },
+        )
+    }
+
+    if (showPages && photo != null) {
+        PageOverviewDialog(
+            pages = photo.pages,
+            busy = busy,
+            onRotate = onRotatePage,
+            onMove = onMovePage,
+            onDelete = onDeletePage,
+            onAddCamera = { openCamera(true) }.takeIf { enabled },
+            onAddGallery = { openGallery(true) }.takeIf { enabled },
+            onDismiss = { showPages = false },
+        )
     }
 
     if (editorOpen) {
@@ -336,22 +434,24 @@ fun AttachmentPreview(
 ) {
     when (attachment) {
         is TextAttachment.Photo -> Box(modifier) {
-            AsyncImage(
-                model = attachment.file,
-                contentDescription = "Foto des Textes",
-                contentScale = ContentScale.Fit,
+            PhotoPager(
+                pages = attachment.pages,
+                zoomable = false,
+                marks = { page -> PageMarks.section(page, attachment.pages.size, attachment.startY, attachment.endY) },
+                onClick = onExpand,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 480.dp)
+                    .height(420.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClickLabel = "Foto vergrößern", onClick = onExpand),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
             )
             Surface(
+                onClick = onExpand,
                 shape = RoundedCornerShape(50),
                 color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
                 modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
             ) {
-                Icon(Icons.Filled.ZoomIn, contentDescription = null, modifier = Modifier.padding(6.dp).size(20.dp))
+                Icon(Icons.Filled.ZoomIn, contentDescription = "Foto vergrößern", modifier = Modifier.padding(6.dp).size(20.dp))
             }
         }
         is TextAttachment.Document ->
@@ -411,7 +511,11 @@ fun AttachmentReader(
     documentContent: DocumentContent? = null,
 ) {
     when (attachment) {
-        is TextAttachment.Photo -> ZoomableImage(attachment.file, modifier.clipToBounds())
+        is TextAttachment.Photo -> PhotoPager(
+            pages = attachment.pages,
+            marks = { page -> PageMarks.section(page, attachment.pages.size, attachment.startY, attachment.endY) },
+            modifier = modifier.clipToBounds(),
+        )
         is TextAttachment.Document -> key(attachment.file) {
             val content = documentContent ?: rememberDocumentContent(attachment).value
             DocumentView(content, reader, modifier, listState = documentListState ?: rememberLazyListState())
@@ -423,7 +527,7 @@ fun AttachmentReader(
 @Composable
 fun AttachmentViewer(attachment: TextAttachment, reader: ReaderSettings, onDismiss: () -> Unit) {
     when (attachment) {
-        is TextAttachment.Photo -> PhotoViewer(attachment.file, onDismiss)
+        is TextAttachment.Photo -> PhotoViewer(attachment, onDismiss)
         is TextAttachment.Document -> Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
             Surface(Modifier.fillMaxSize()) {
                 Column(Modifier.safeDrawingPadding()) {
@@ -448,12 +552,17 @@ fun AttachmentViewer(attachment: TextAttachment, reader: ReaderSettings, onDismi
     }
 }
 
-/** Vollbildansicht mit Zwei-Finger-Zoom und Doppeltipp-Zoom. */
+/** Vollbildansicht zum Durchwischen, mit Zwei-Finger-Zoom und Doppeltipp-Zoom. */
 @Composable
-fun PhotoViewer(photo: File, onDismiss: () -> Unit) {
+fun PhotoViewer(photo: TextAttachment.Photo, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            ZoomableImage(photo, Modifier.fillMaxSize())
+            PhotoPager(
+                pages = photo.pages,
+                onDark = true,
+                marks = { page -> PageMarks.section(page, photo.pages.size, photo.startY, photo.endY) },
+                modifier = Modifier.fillMaxSize().safeDrawingPadding(),
+            )
             IconButton(
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(8.dp),
@@ -462,52 +571,4 @@ fun PhotoViewer(photo: File, onDismiss: () -> Unit) {
             }
         }
     }
-}
-
-@Composable
-fun ZoomableImage(photo: File, modifier: Modifier = Modifier) {
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    var size by remember { mutableStateOf(IntSize.Zero) }
-
-    fun clamp(value: Offset, zoom: Float): Offset {
-        val maxX = size.width * (zoom - 1) / 2f
-        val maxY = size.height * (zoom - 1) / 2f
-        return Offset(value.x.coerceIn(-maxX, maxX), value.y.coerceIn(-maxY, maxY))
-    }
-
-    AsyncImage(
-        model = photo,
-        contentDescription = "Foto des Textes, vergrößerbar",
-        contentScale = ContentScale.Fit,
-        modifier = modifier
-            .onSizeChanged { size = it }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onDoubleTap = { tap ->
-                        if (scale > 1f) {
-                            scale = 1f
-                            offset = Offset.Zero
-                        } else {
-                            val center = Offset(size.width / 2f, size.height / 2f)
-                            scale = 2.5f
-                            offset = clamp((center - tap) * 1.5f, 2.5f)
-                        }
-                    },
-                )
-            }
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val newScale = (scale * zoom).coerceIn(1f, 6f)
-                    scale = newScale
-                    offset = if (newScale == 1f) Offset.Zero else clamp(offset + pan, newScale)
-                }
-            }
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                translationX = offset.x
-                translationY = offset.y
-            },
-    )
 }

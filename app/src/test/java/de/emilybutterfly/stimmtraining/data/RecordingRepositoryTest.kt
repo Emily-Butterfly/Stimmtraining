@@ -40,6 +40,41 @@ class RecordingRepositoryTest {
     }
 
     @Test
+    fun severalPagesAndTheSectionLinesAreSavedInOrder() = runBlocking {
+        val audio = files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1)) }
+        val pages = (1..3).map { n -> files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(n.toByte())) } }
+        val id = repository.create(audio, TextAttachment.Photo(pages, startY = 0.3f, endY = 0.6f), 1L, 1L, RecordingParams())
+
+        val saved = db.recordingDao().get(id)!!
+        assertEquals(3, saved.photoPages.size)
+        assertEquals(listOf<Byte>(1, 2, 3), saved.photoPages.map { files.photo(it).readBytes().single() })
+        val attachment = repository.attachmentOf(saved) as TextAttachment.Photo
+        assertEquals(0.3f, attachment.startY)
+        assertEquals(0.6f, attachment.endY)
+        assertTrue(pages.none { it.exists() })
+
+        // Zwei neue Seiten ersetzen die drei alten; die alten Dateien verschwinden.
+        val replacement = (4..5).map { n -> files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(n.toByte())) } }
+        repository.update(id, saved.params(), AttachmentChange.Replace(TextAttachment.Photo(replacement)))
+        val updated = db.recordingDao().get(id)!!
+        assertEquals(listOf<Byte>(4, 5), updated.photoPages.map { files.photo(it).readBytes().single() })
+        assertNull("geänderte Seiten haben keine Linien mehr", updated.sectionStartY)
+        assertTrue(saved.photoPages.none { files.photo(it).exists() })
+
+        repository.delete(updated)
+        assertEquals(0, files.photoDir.listFiles()?.size ?: 0)
+    }
+
+    @Test
+    fun vanishedPagesAreSkippedInsteadOfLosingTheRecording() = runBlocking {
+        val audio = files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1)) }
+        val kept = files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(7)) }
+        val vanished = files.newDraftFile("jpg")
+        val id = repository.create(audio, TextAttachment.Photo(listOf(vanished, kept)), 1L, 1L, RecordingParams())
+        assertEquals(1, db.recordingDao().get(id)!!.photoPages.size)
+    }
+
+    @Test
     fun failedSaveLeavesTheDraftsInPlaceSoSavingCanBeRetried() = runBlocking {
         val audio = files.newDraftFile("m4a").apply { writeBytes(byteArrayOf(1, 2, 3)) }
         val photo = files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(4, 5)) }
@@ -154,6 +189,8 @@ class RecordingRepositoryTest {
                 photoFile = snapshot.photoFile,
                 documentFile = snapshot.documentFile,
                 documentName = snapshot.documentName,
+                sectionStartY = snapshot.sectionStartY,
+                sectionEndY = snapshot.sectionEndY,
                 title = "bearbeitet",
                 exercise = snapshot.exercise,
                 warmedUp = snapshot.warmedUp,

@@ -1,0 +1,313 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "37e1d26f0e10274eff8e8c5b9f194d4d",
+    "entities": [
+      {
+        "tableName": "recordings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL, `recordedAt` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `audioFile` TEXT NOT NULL, `photoFile` TEXT, `documentFile` TEXT, `documentName` TEXT, `sectionStartY` REAL, `sectionEndY` REAL, `pitchMostFrequent` INTEGER, `pitchLowest` INTEGER, `pitchHighest` INTEGER, `pitchVoicedMs` INTEGER, `title` TEXT NOT NULL, `exercise` TEXT NOT NULL, `warmedUp` INTEGER NOT NULL, `warmUpMinutes` INTEGER, `voiceCondition` INTEGER, `selfRating` INTEGER, `notes` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordedAt",
+            "columnName": "recordedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "audioFile",
+            "columnName": "audioFile",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "photoFile",
+            "columnName": "photoFile",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "documentFile",
+            "columnName": "documentFile",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "documentName",
+            "columnName": "documentName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sectionStartY",
+            "columnName": "sectionStartY",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "sectionEndY",
+            "columnName": "sectionEndY",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "pitchMostFrequent",
+            "columnName": "pitchMostFrequent",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pitchLowest",
+            "columnName": "pitchLowest",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pitchHighest",
+            "columnName": "pitchHighest",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pitchVoicedMs",
+            "columnName": "pitchVoicedMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exercise",
+            "columnName": "exercise",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warmedUp",
+            "columnName": "warmedUp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warmUpMinutes",
+            "columnName": "warmUpMinutes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "voiceCondition",
+            "columnName": "voiceCondition",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "selfRating",
+            "columnName": "selfRating",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recordings_uuid",
+            "unique": true,
+            "columnNames": [
+              "uuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_recordings_uuid` ON `${TABLE_NAME}` (`uuid`)"
+          }
+        ]
+      },
+      {
+        "tableName": "library_texts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `uuid` TEXT NOT NULL, `title` TEXT NOT NULL, `tags` TEXT NOT NULL, `photoFiles` TEXT, `documentFile` TEXT, `documentName` TEXT, `pinned` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `finishedAt` INTEGER, `lastReadAt` INTEGER, `progressOffset` INTEGER, `progressAnchor` TEXT, `progressPage` INTEGER, `progressY` REAL, `progressPageName` TEXT, `progressFraction` REAL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uuid",
+            "columnName": "uuid",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "photoFiles",
+            "columnName": "photoFiles",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "documentFile",
+            "columnName": "documentFile",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "documentName",
+            "columnName": "documentName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pinned",
+            "columnName": "pinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finishedAt",
+            "columnName": "finishedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastReadAt",
+            "columnName": "lastReadAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "progressOffset",
+            "columnName": "progressOffset",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "progressAnchor",
+            "columnName": "progressAnchor",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "progressPage",
+            "columnName": "progressPage",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "progressY",
+            "columnName": "progressY",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "progressPageName",
+            "columnName": "progressPageName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "progressFraction",
+            "columnName": "progressFraction",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_library_texts_uuid",
+            "unique": true,
+            "columnNames": [
+              "uuid"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_library_texts_uuid` ON `${TABLE_NAME}` (`uuid`)"
+          }
+        ]
+      },
+      {
+        "tableName": "library_search",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`textId` INTEGER NOT NULL, `content` TEXT NOT NULL, PRIMARY KEY(`textId`), FOREIGN KEY(`textId`) REFERENCES `library_texts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "textId",
+            "columnName": "textId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "content",
+            "columnName": "content",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "textId"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "library_texts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "textId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '37e1d26f0e10274eff8e8c5b9f194d4d')"
+    ]
+  }
+}

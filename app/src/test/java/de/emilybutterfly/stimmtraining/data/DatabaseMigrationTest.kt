@@ -5,6 +5,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import de.emilybutterfly.stimmtraining.data.library.LibraryText
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -29,7 +31,7 @@ class DatabaseMigrationTest {
 
         // Room prüft nach der Migration, ob die Tabelle genau dem neuen Schema entspricht.
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
             .allowMainThreadQueries()
             .build()
         try {
@@ -44,6 +46,8 @@ class DatabaseMigrationTest {
             assertNull(recording.documentName)
             assertNull("noch nicht analysiert", recording.pitchVoicedMs)
             assertNull(recording.pitchMostFrequent)
+            assertEquals(listOf("a_1.jpg"), recording.photoPages)
+            assertNull(recording.sectionStartY)
 
             db.recordingDao().update(recording.copy(photoFile = null, documentFile = "b.pdf", documentName = "Nordwind.pdf"))
             assertEquals("Nordwind.pdf", db.recordingDao().get(recording.id)?.documentName)
@@ -57,9 +61,45 @@ class DatabaseMigrationTest {
         }
     }
 
-    /** Legt die Datenbank so an, wie Version 1 sie hinterlassen hat – nach dem exportierten Schema. */
-    private fun createVersion1Database() {
-        val schema = JSONObject(File(SCHEMA_1).readText()).getJSONObject("database")
+    @Test
+    fun version2RecordingsSurviveAndTheLibraryWorks() = runBlocking {
+        context.deleteDatabase(name)
+        createDatabase(SCHEMA_2)
+
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val recording = db.recordingDao().getAll().single()
+            assertEquals("Nordwind", recording.title)
+            assertEquals(listOf("a_1.jpg"), recording.photoPages)
+            db.recordingDao().update(recording.copy(photoFile = "a_1.jpg\na_2.jpg", sectionStartY = 0.25f, sectionEndY = 0.5f))
+            val twoPages = db.recordingDao().get(recording.id)!!
+            assertEquals(listOf("a_1.jpg", "a_2.jpg"), twoPages.photoPages)
+            assertEquals(0.25f, twoPages.sectionStartY)
+
+            val library = db.libraryDao()
+            val id = library.insertWithSearch(
+                LibraryText(uuid = "c9bf9e57-1685-4c89-bafb-ff5af830be8a", title = "Der Prozess", createdAt = 1, updatedAt = 1),
+                content = "der prozess\njemand musste josef k. verleumdet haben",
+            )
+            assertEquals(listOf(id), library.observeMatches("josef").first())
+            assertEquals(emptyList<Long>(), library.observeMatches("nordwind").first())
+            library.delete(id)
+            assertEquals(0, library.count())
+            assertNull(library.searchContent(id))
+        } finally {
+            db.close()
+            context.deleteDatabase(name)
+        }
+    }
+
+    private fun createVersion1Database() = createDatabase(SCHEMA_1)
+
+    /** Legt die Datenbank so an, wie eine frühere Version sie hinterlassen hat – nach dem exportierten Schema. */
+    private fun createDatabase(schemaFile: String) {
+        val schema = JSONObject(File(schemaFile).readText()).getJSONObject("database")
         val file = context.getDatabasePath(name).apply { parentFile?.mkdirs() }
         val sqlite = SQLiteDatabase.openOrCreateDatabase(file, null)
         try {
@@ -90,5 +130,6 @@ class DatabaseMigrationTest {
     private companion object {
         /** Gradle führt die Tests im Modulordner aus. */
         const val SCHEMA_1 = "schemas/de.emilybutterfly.stimmtraining.data.AppDatabase/1.json"
+        const val SCHEMA_2 = "schemas/de.emilybutterfly.stimmtraining.data.AppDatabase/2.json"
     }
 }

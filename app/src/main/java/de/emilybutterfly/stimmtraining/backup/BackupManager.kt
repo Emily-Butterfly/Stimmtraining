@@ -52,7 +52,7 @@ class BackupManager(
         zip.closeEntry()
         for (recording in recordings) {
             addFile(zip, BackupFormat.AUDIO_DIR + recording.audioFile, files.audio(recording.audioFile))
-            recording.photoFile?.let { addFile(zip, BackupFormat.PHOTO_DIR + it, files.photo(it)) }
+            recording.photoPages.forEach { addFile(zip, BackupFormat.PHOTO_DIR + it, files.photo(it)) }
             recording.documentFile?.let { addFile(zip, BackupFormat.DOCUMENT_DIR + it, files.document(it)) }
         }
         zip.finish()

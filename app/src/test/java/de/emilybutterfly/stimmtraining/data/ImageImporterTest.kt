@@ -46,6 +46,38 @@ class ImageImporterTest {
     }
 
     @Test
+    fun rotatesClockwiseAndBackWithoutTouchingTheOriginal() {
+        // Links oben ein roter Fleck: nach einer Rechtsdrehung liegt er rechts oben.
+        val bitmap = Bitmap.createBitmap(400, 200, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+            for (x in 0 until 60) for (y in 0 until 60) setPixel(x, y, Color.RED)
+        }
+        val source = File(context.cacheDir, "rotate_source.jpg").apply { outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) } }
+        val original = source.readBytes()
+        val right = File(context.cacheDir, "rotate_right.jpg")
+        ImageImporter.rotate(source, right, clockwise = true)
+        val rotated = BitmapFactory.decodeFile(right.path)
+        assertEquals(200 to 400, rotated.width to rotated.height)
+        assertEquals("rot rechts oben", true, Color.red(rotated.getPixel(170, 30)) > 200 && Color.green(rotated.getPixel(170, 30)) < 80)
+        assertEquals("links oben weiß", true, Color.green(rotated.getPixel(30, 30)) > 200)
+        assertEquals(true, original.contentEquals(source.readBytes()))
+
+        val back = File(context.cacheDir, "rotate_back.jpg")
+        ImageImporter.rotate(right, back, clockwise = false)
+        val restored = BitmapFactory.decodeFile(back.path)
+        assertEquals(400 to 200, restored.width to restored.height)
+        assertEquals(true, Color.red(restored.getPixel(30, 30)) > 200 && Color.green(restored.getPixel(30, 30)) < 80)
+    }
+
+    @Test
+    fun rotatingSomethingThatIsNoImageFailsCleanly() {
+        val source = File(context.cacheDir, "no_image.jpg").apply { writeText("kein Bild") }
+        val target = File(context.cacheDir, "no_image_rotated.jpg")
+        assertThrows(IOException::class.java) { ImageImporter.rotate(source, target, clockwise = true) }
+        assertEquals(false, target.exists())
+    }
+
+    @Test
     fun importsAPhotoUnchangedInSize() {
         assertEquals(400 to 300, importAndMeasure(jpeg(400, 300)))
     }

@@ -61,10 +61,32 @@ object ImageImporter {
             ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
         }
 
-        val result = if (matrix.isIdentity) {
-            decoded
-        } else {
-            Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        writeTransformed(decoded, matrix, target)
+    }
+
+    /**
+     * Dreht ein bereits übernommenes Foto um 90° und speichert es als [target]. Das Original bleibt
+     * unverändert, damit bei einem Fehler nichts verloren geht.
+     */
+    fun rotate(source: File, target: File, clockwise: Boolean) {
+        val decoded = try {
+            BitmapFactory.decodeFile(source.path)
+        } catch (_: OutOfMemoryError) {
+            null
+        } ?: throw IOException("Bild konnte nicht gelesen werden")
+        writeTransformed(decoded, Matrix().apply { postRotate(if (clockwise) 90f else -90f) }, target)
+    }
+
+    private fun writeTransformed(decoded: Bitmap, matrix: Matrix, target: File) {
+        val result = try {
+            if (matrix.isIdentity) {
+                decoded
+            } else {
+                Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+            }
+        } catch (e: OutOfMemoryError) {
+            decoded.recycle()
+            throw IOException("Zu wenig Arbeitsspeicher für das Bild", e)
         }
         try {
             target.parentFile?.mkdirs()
@@ -73,6 +95,9 @@ object ImageImporter {
                     throw IOException("Bild konnte nicht gespeichert werden")
                 }
             }
+        } catch (e: IOException) {
+            target.delete()
+            throw e
         } finally {
             if (result !== decoded) result.recycle()
             decoded.recycle()

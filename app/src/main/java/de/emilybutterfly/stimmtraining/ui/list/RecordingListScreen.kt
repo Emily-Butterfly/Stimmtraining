@@ -204,7 +204,7 @@ private fun RecordingCard(recording: Recording, attachment: TextAttachment?, onC
         ) {
             if (attachment is TextAttachment.Photo) {
                 AsyncImage(
-                    model = attachment.file,
+                    model = attachment.pages.first(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)),

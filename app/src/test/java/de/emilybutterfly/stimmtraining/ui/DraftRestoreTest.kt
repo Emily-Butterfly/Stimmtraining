@@ -61,6 +61,31 @@ class DraftRestoreTest {
     }
 
     @Test
+    fun severalPagesAreRestoredInOrderAndCanBeArranged() {
+        val handle = SavedStateHandle()
+        val pages = (1..3).map { n -> app.container.files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(n.toByte())) } }
+        handle[RecordViewModel.KEY_PHOTO] = pages.joinToString("\n") { it.absolutePath }
+
+        val viewModel = RecordViewModel(app, app.container, handle)
+        assertEquals(TextAttachment.Photo(pages), viewModel.state.value.attachment)
+
+        viewModel.movePage(2, 0)
+        assertEquals(listOf(pages[2], pages[0], pages[1]), (viewModel.state.value.attachment as TextAttachment.Photo).pages)
+        viewModel.deletePage(1)
+        assertFalse("gelöschte Seite ist weg", pages[0].exists())
+        assertEquals(listOf(pages[2], pages[1]), (viewModel.state.value.attachment as TextAttachment.Photo).pages)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        // Nach einem Neustart durch Android ist die neue Reihenfolge noch da.
+        val restored = RecordViewModel(app, app.container, handle)
+        assertEquals(listOf(pages[2], pages[1]), (restored.state.value.attachment as TextAttachment.Photo).pages)
+
+        restored.deletePage(0)
+        restored.deletePage(0)
+        assertNull("letzte Seite gelöscht: kein Anhang mehr", restored.state.value.attachment)
+    }
+
+    @Test
     fun draftsSurviveTheViewModelBeingClearedAndAreOnlyDeletedWhenDiscarded() {
         val audio = app.container.files.newDraftFile("m4a").apply { writeBytes(ByteArray(100)) }
         val photo = app.container.files.newDraftFile("jpg").apply { writeBytes(ByteArray(10)) }

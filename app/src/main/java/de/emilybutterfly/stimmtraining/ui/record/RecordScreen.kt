@@ -127,7 +127,7 @@ fun RecordScreen(
     val reader = rememberReaderSettings()
     // Inline-Karte und Lesemodus sind nie gleichzeitig zu sehen und teilen sich die Leseposition;
     // das Formular behält seine Scrollposition, während der Lesemodus offen ist.
-    val documentListState = rememberSaveable(state.attachment?.file, saver = LazyListState.Saver) { LazyListState() }
+    val documentListState = rememberSaveable(state.attachment?.files?.firstOrNull(), saver = LazyListState.Saver) { LazyListState() }
     val formScroll = rememberScrollState()
     // Das Formular behält beim Wechsel in den Lesemodus seinen ganzen Zustand (z. B. eingeklappte Anleitung).
     val formState = rememberSaveableStateHolder()
@@ -248,7 +248,10 @@ fun RecordScreen(
                     reader = reader,
                     cameraTarget = viewModel::cameraTarget,
                     onCameraResult = viewModel::onCameraPhoto,
-                    onPhotoPicked = viewModel::onPhotoPicked,
+                    onPhotosPicked = viewModel::onPhotosPicked,
+                    onRotatePage = viewModel::rotatePage,
+                    onMovePage = viewModel::movePage,
+                    onDeletePage = viewModel::deletePage,
                     onDocumentPicked = viewModel::onDocumentPicked,
                     onTextPasted = viewModel::onTextPasted,
                     onRemove = viewModel::removeAttachment,

@@ -8,8 +8,10 @@ import androidx.room.PrimaryKey
  * Eine gespeicherte Stimmaufnahme mit ihren Parametern.
  *
  * [audioFile], [photoFile] und [documentFile] sind reine Dateinamen in [FileStore.audioDir],
- * [FileStore.photoDir] bzw. [FileStore.documentDir]. Der gelesene Text hängt entweder als Foto
+ * [FileStore.photoDir] bzw. [FileStore.documentDir]. Der gelesene Text hängt entweder als Fotos
  * oder als Datei (PDF, Word, …) an; [documentName] ist der ursprüngliche Name der Datei.
+ * [photoFile] enthält bei mehreren Seiten einen Namen pro Zeile (siehe [photoPages]); so lesen
+ * auch ältere Datenbanken und Sicherungen mit genau einem Foto richtig.
  * [uuid] identifiziert die Aufnahme geräteübergreifend, damit beim Wiederherstellen eines
  * Backups nichts doppelt importiert wird.
  */
@@ -24,6 +26,13 @@ data class Recording(
     val photoFile: String?,
     val documentFile: String? = null,
     val documentName: String? = null,
+    /**
+     * Gelesener Abschnitt auf den Fotoseiten (0 = oben, 1 = unten): ab [sectionStartY] auf der ersten
+     * und bis [sectionEndY] auf der letzten Seite; null heißt ganze Seite. Gesetzt, wenn nur ein Teil
+     * eines Bibliothekstexts gelesen wurde.
+     */
+    val sectionStartY: Float? = null,
+    val sectionEndY: Float? = null,
     /**
      * Ergebnis der Tonhöhen-Analyse als MIDI-Noten (A4 = 69). [pitchVoicedMs] ist null, solange
      * nicht analysiert wurde; die Noten sind null, wenn zu wenig Stimme erkannt wurde.
@@ -45,6 +54,9 @@ data class Recording(
 ) {
     val displayTitle: String
         get() = title.ifBlank { exercise.ifBlank { "Aufnahme" } }
+
+    /** Die Fotoseiten in Lesereihenfolge. */
+    val photoPages: List<String> get() = photoFile.pageNames()
 
     fun params() = RecordingParams(
         title = title,
@@ -81,6 +93,8 @@ data class RecordingEdit(
     val photoFile: String?,
     val documentFile: String?,
     val documentName: String?,
+    val sectionStartY: Float?,
+    val sectionEndY: Float?,
     val title: String,
     val exercise: String,
     val warmedUp: Boolean,

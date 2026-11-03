@@ -15,6 +15,7 @@ import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.data.document.DocumentImporter
 import de.emilybutterfly.stimmtraining.data.document.DocumentReadException
 import de.emilybutterfly.stimmtraining.data.document.UnsupportedDocumentException
+import de.emilybutterfly.stimmtraining.ui.components.formatBytes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -83,6 +84,31 @@ suspend fun FileStore.importDraftPhoto(context: Context, source: Uri): File = cr
     }
 }
 
+/**
+ * Übernimmt mehrere Bilder aus der Galerie als Entwürfe, in der gewählten Reihenfolge. Bilder,
+ * die sich nicht lesen lassen, fehlen im Ergebnis; ließ sich gar keins lesen, kommt der Fehler.
+ */
+suspend fun FileStore.importDraftPhotos(context: Context, sources: List<Uri>): List<File> {
+    val imported = mutableListOf<File>()
+    var failure: Exception? = null
+    try {
+        for (source in sources) {
+            try {
+                imported += importDraftPhoto(context, source)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failure = failure ?: e
+            }
+        }
+    } catch (e: CancellationException) {
+        imported.forEach { it.delete() }
+        throw e
+    }
+    if (imported.isEmpty()) failure?.let { throw it }
+    return imported
+}
+
 /** Übernimmt das zuletzt mit der Kamera aufgenommene Foto als Entwurf. */
 suspend fun FileStore.importCameraCapture(context: Context): File {
     val capture = cameraCaptureFile
@@ -122,3 +148,90 @@ fun importFailureMessage(isPhoto: Boolean, e: Throwable): String {
 suspend fun FileStore.openWithChooser(document: TextAttachment.Document): Intent = withContext(Dispatchers.IO) {
     Intent.createChooser(viewIntent(document.file, document.name, document.kind.mimeType), "Öffnen mit")
 }
+
+/**
+ * Ändert die Seiten eines Foto-Entwurfs. Was dabei aus dem Entwurf herausfällt (gelöschte oder
+ * durch eine gedrehte Fassung ersetzte Seiten), wird gelöscht. Geänderte Seiten verlieren die
+ * Abschnittslinien, weil sie nicht mehr zum Bild passen würden.
+ */
+internal object DraftPages {
+    fun move(photo: TextAttachment.Photo, from: Int, to: Int): TextAttachment.Photo {
+        if (from !in photo.pages.indices || to !in photo.pages.indices || from == to) return photo
+        val pages = photo.pages.toMutableList()
+        pages.add(to, pages.removeAt(from))
+        return photo.withPages(pages)
+    }
+
+    /** null, wenn die letzte Seite gelöscht wurde. */
+    fun delete(photo: TextAttachment.Photo, index: Int): TextAttachment.Photo? {
+        val page = photo.pages.getOrNull(index) ?: return photo
+        page.delete()
+        val rest = photo.pages - page
+        return if (rest.isEmpty()) null else photo.withPages(rest)
+    }
+
+    /**
+     * Dreht Seite [index] in einen neuen Entwurf. Neuer Dateiname, damit kein altes Bild aus dem
+     * Cache erscheint; die alte Entwurfsdatei wird erst danach gelöscht.
+     */
+    suspend fun rotate(files: FileStore, photo: TextAttachment.Photo, index: Int, clockwise: Boolean): TextAttachment.Photo {
+        val page = photo.pages.getOrNull(index) ?: return photo
+        files.requireSpaceFor(page.length() * 2)
+        val rotated = createDraft({ it }) {
+            val target = files.newDraftFile("jpg")
+            try {
+                ImageImporter.rotate(page, target, clockwise)
+                target
+            } catch (e: Exception) {
+                target.delete()
+                throw e
+            }
+        }
+        page.delete()
+        return photo.withPages(photo.pages.toMutableList().also { it[index] = rotated })
+    }
+
+    /** Hängt [added] an [photo] an (oder beginnt damit); was über [TextAttachment.MAX_PAGES] hinausgeht, wird gelöscht. */
+    fun append(photo: TextAttachment.Photo?, added: List<File>): Pair<TextAttachment.Photo, Int> {
+        val pages = photo?.pages.orEmpty() + added
+        val kept = pages.take(TextAttachment.MAX_PAGES)
+        val dropped = pages.drop(TextAttachment.MAX_PAGES)
+        dropped.forEach { it.delete() }
+        return (photo?.withPages(kept) ?: TextAttachment.Photo(kept)) to dropped.size
+    }
+
+    /**
+     * Kopiert gespeicherte Seiten in Entwürfe, damit sich die Seiten bearbeiten lassen, ohne das
+     * Original anzufassen – bis zum Speichern lässt sich alles verwerfen.
+     */
+    suspend fun copyToDrafts(files: FileStore, photo: TextAttachment.Photo): TextAttachment.Photo {
+        files.requireSpaceFor(photo.pages.sumOf { it.length() })
+        val copies = mutableListOf<File>()
+        try {
+            withContext(Dispatchers.IO) {
+                for (page in photo.pages) {
+                    val copy = files.newDraftFile("jpg")
+                    copies += copy
+                    page.copyTo(copy, overwrite = true)
+                }
+            }
+            return photo.copy(pages = copies.toList())
+        } catch (e: Throwable) {
+            // Auch beim Abbrechen: Halbe Kopien sollen nicht liegen bleiben.
+            copies.forEach { it.delete() }
+            throw e
+        }
+    }
+}
+
+/** Bricht mit verständlicher Meldung ab, wenn für [bytes] kein Platz mehr ist (die Reserve bleibt frei). */
+fun FileStore.requireSpaceFor(bytes: Long) {
+    val space = freeBytes() - FileStore.RESERVE_BYTES
+    if (bytes > space) {
+        throw DocumentReadException("Nicht genug Speicherplatz (nutzbar sind noch ${formatBytes(space.coerceAtLeast(0))}).")
+    }
+}
+
+/** Meldung, wenn eine Seite sich nicht drehen ließ. */
+fun pageFailureMessage(e: Throwable): String =
+    (e as? DocumentReadException)?.message ?: "Die Seite ließ sich nicht drehen."

@@ -8,17 +8,20 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 
-/** Ablageorte für Audiodateien, Fotos, Dokumente und noch nicht gespeicherte Entwürfe. */
+/** Ablageorte für Audiodateien, Fotos, Dokumente, die Bibliothek und noch nicht gespeicherte Entwürfe. */
 class FileStore(private val context: Context) {
     val audioDir: File get() = File(context.filesDir, "recordings").apply { mkdirs() }
     val photoDir: File get() = File(context.filesDir, "photos").apply { mkdirs() }
     val documentDir: File get() = File(context.filesDir, "documents").apply { mkdirs() }
+    /** Fotos und Dateien der Bibliothek. */
+    val libraryDir: File get() = File(context.filesDir, "library").apply { mkdirs() }
     /** Nicht im Cache: Android darf den Cache leeren, bevor eine Aufnahme gespeichert ist. */
     private val draftDir: File get() = File(context.filesDir, "drafts").apply { mkdirs() }
 
     fun audio(name: String) = File(audioDir, name)
     fun photo(name: String) = File(photoDir, name)
     fun document(name: String) = File(documentDir, name)
+    fun library(name: String) = File(libraryDir, name)
 
     fun newDraftFile(extension: String) = File(draftDir, "draft_${UUID.randomUUID()}.$extension")
 
@@ -38,7 +41,7 @@ class FileStore(private val context: Context) {
     }
 
     fun totalBytes(): Long =
-        listOf(audioDir, photoDir, documentDir).sumOf { dir -> dir.listFiles()?.sumOf { it.length() } ?: 0L }
+        listOf(audioDir, photoDir, documentDir, libraryDir).sumOf { dir -> dir.listFiles()?.sumOf { it.length() } ?: 0L }
 
     /** Freier Speicher im internen Speicher der App. */
     fun freeBytes(): Long = context.filesDir.usableSpace
