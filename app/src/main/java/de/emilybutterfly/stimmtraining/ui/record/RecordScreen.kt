@@ -126,6 +126,8 @@ fun RecordScreen(
     onClose: () -> Unit,
     onSaved: (Long) -> Unit,
     onPickFromLibrary: () -> Unit = {},
+    pickedLibraryText: Long? = null,
+    onPickedLibraryTextHandled: () -> Unit = {},
     viewModel: RecordViewModel = viewModel(factory = RecordViewModel.Factory),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -162,6 +164,14 @@ fun RecordScreen(
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         if (granted) viewModel.startRecording() else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    // Aus der Bibliothek gewählt: einmal übernehmen.
+    LaunchedEffect(pickedLibraryText) {
+        if (pickedLibraryText != null) {
+            viewModel.selectLibraryText(pickedLibraryText)
+            onPickedLibraryTextHandled()
+        }
     }
 
     LaunchedEffect(state.message) {

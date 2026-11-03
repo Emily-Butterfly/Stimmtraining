@@ -159,15 +159,6 @@ class RecordViewModel(
         }
         loadGuide()
         restoreLibrary()
-        // Aus der Bibliothek gewählt (über die Auswahl-Ansicht, die das Ergebnis hier ablegt).
-        viewModelScope.launch {
-            savedState.getStateFlow<Long?>(KEY_PICKED_LIBRARY_TEXT, null).collect { id ->
-                if (id != null) {
-                    savedState[KEY_PICKED_LIBRARY_TEXT] = null
-                    selectLibraryText(id)
-                }
-            }
-        }
         // Wer die Tonhöhe ausblendet, soll auch keine laufende Analyse mehr spüren (Meldungen, Warten beim Speichern).
         viewModelScope.launch {
             container.settings.gentleMode.collect { gentle -> if (gentle) pitchJob?.cancel() }
@@ -788,7 +779,7 @@ class RecordViewModel(
         const val ARG_EXERCISE = "exercise"
         /** Mit diesem Bibliothekstext beginnen (z. B. „Für eine Aufnahme verwenden“). */
         const val ARG_LIBRARY_TEXT = "libraryText"
-        /** Hier legt die Bibliotheks-Auswahl den gewählten Text ab. */
+        /** Hier legt die Bibliotheks-Auswahl den gewählten Text ab (im Navigationseintrag der Aufnahme). */
         const val KEY_PICKED_LIBRARY_TEXT = "pickedLibraryText"
         internal const val KEY_LIBRARY_ID = "libraryId"
         internal const val KEY_LIBRARY_ARG_USED = "libraryArgUsed"

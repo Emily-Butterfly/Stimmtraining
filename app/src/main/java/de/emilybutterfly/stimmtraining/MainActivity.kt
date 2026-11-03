@@ -7,6 +7,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavType
@@ -142,9 +144,13 @@ private fun AppNavigation() {
                 },
             ),
         ) { entry ->
+            val picked by entry.savedStateHandle.getStateFlow<Long?>(RecordViewModel.KEY_PICKED_LIBRARY_TEXT, null)
+                .collectAsStateWithLifecycle()
             RecordScreen(
                 onClose = { navController.fromCurrent(entry) { popBackStack() } },
                 onPickFromLibrary = { navController.fromCurrent(entry) { navigate("library/pick") } },
+                pickedLibraryText = picked,
+                onPickedLibraryTextHandled = { entry.savedStateHandle[RecordViewModel.KEY_PICKED_LIBRARY_TEXT] = null },
                 onSaved = { id ->
                     navController.fromCurrent(entry) {
                         // Nur die Aufnahme ersetzen: Zurück führt dorthin, wo sie gestartet wurde

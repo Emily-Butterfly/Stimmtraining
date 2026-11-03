@@ -179,8 +179,7 @@ class LibraryFlowTest {
         val withPhoto = RecordViewModel(app, container, handle)
         assertTrue(withPhoto.state.value.attachment is TextAttachment.Photo)
 
-        // So legt die Bibliotheks-Auswahl ihr Ergebnis ab.
-        handle[RecordViewModel.KEY_PICKED_LIBRARY_TEXT] = id
+        withPhoto.selectLibraryText(id)
         waitFor { withPhoto.state.value.library != null && !withPhoto.state.value.attachmentBusy }
         assertNull(withPhoto.state.value.attachment)
         assertFalse("eigener Entwurf ist weg", photo.exists())

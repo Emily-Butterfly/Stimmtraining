@@ -390,7 +390,7 @@ fun PageOverviewDialog(
                                     OutlinedButton(onClick = it, enabled = !busy, modifier = Modifier.weight(1f)) {
                                         Icon(Icons.Outlined.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text("Seite fotografieren")
+                                        Text("Fotografieren")
                                     }
                                 }
                                 onAddGallery?.let {
