@@ -268,7 +268,10 @@ class LibraryScreensTest {
         // Stelle von Hand korrigieren: das letzte Absatzende antippen.
         text("Stelle ändern").performClick()
         waitForText("Bis wohin gelesen?")
-        compose.onNode(hasText("Vierter Satz. Fünfter Satz.") and hasAnyAncestor(isDialog())).performTouchInput { click(centerRight.copy(x = right - 2f)) }
+        // Der Text im Dialog lädt im Hintergrund.
+        val lastParagraph = hasText("Vierter Satz. Fünfter Satz.") and hasAnyAncestor(isDialog())
+        compose.waitUntil(10_000) { compose.onAllNodes(lastParagraph).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(lastParagraph).performTouchInput { click(centerRight.copy(x = right - 2f)) }
         screenshot("bibliothek_stelle_aendern")
         text("Übernehmen").performClick()
         // Der letzte Satz ist das Ende: Der Text gilt damit als gelesen und wandert nach „Gelesen“.
@@ -357,6 +360,8 @@ class LibraryScreensTest {
             }
         }
         waitForText("Text auswählen")
+        // Die Titelleiste steht sofort, die Liste lädt im Hintergrund: auf den Eintrag selbst warten.
+        waitForText("Kurz")
         text("Kurz").performClick()
         assertEquals(id, picked)
         assertNotNull(runBlocking { library.observeAll().first() })
