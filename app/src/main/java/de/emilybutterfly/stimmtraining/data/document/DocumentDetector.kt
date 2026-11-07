@@ -11,7 +11,7 @@ object DocumentDetector {
     private const val SNIFF_BYTES = 8192
 
     private const val SUPPORTED =
-        "Unterstützt werden PDF, Word (.docx), OpenDocument (.odt), RTF, HTML, Markdown (.md) und Textdateien (.txt)."
+        "Unterstützt werden PDF, E-Books (EPUB), Word (.docx), OpenDocument (.odt), RTF, HTML, Markdown (.md) und Textdateien (.txt)."
     private const val UNKNOWN = "Dieses Dateiformat kann die App nicht lesen. $SUPPORTED"
     private const val DAMAGED = "Die Datei ist beschädigt und lässt sich nicht öffnen."
     private const val OLD_WORD = "Ältere Word-Dateien (.doc) kann die App nicht lesen. " +
@@ -20,7 +20,8 @@ object DocumentDetector {
     private const val IMAGE = "Das ist ein Bild. Fotos von Texten fügst du über „Kamera“ oder „Galerie“ hinzu."
     private const val SPREADSHEET = "Tabellen kann die App nicht als Text anzeigen. $SUPPORTED"
     private const val PRESENTATION = "Präsentationen kann die App nicht als Text anzeigen. Speichere sie als PDF."
-    private const val EPUB = "E-Books (EPUB) kann die App nicht lesen. $SUPPORTED"
+    private const val EPUB_DRM = "Das E-Book ist kopiergeschützt (DRM) und lässt sich nicht lesen. " +
+        "E-Books ohne Kopierschutz (z. B. mit „Wasserzeichen“ oder frei verfügbare) funktionieren."
     private const val ZIP = "ZIP-Archive kann die App nicht lesen. Entpacke die Datei und wähle das Dokument darin aus."
     private const val PASSWORD = "Die Datei ist mit einem Kennwort geschützt. Speichere sie ohne Kennwort und wähle sie dann erneut aus."
 
@@ -109,9 +110,13 @@ object DocumentDetector {
             }
             return DocumentKind.Odt
         }
+        // E-Book: Kennung "mimetype" oder (bei nachlässig gepackten) container.xml mit Paketdokument.
+        if (mimetype == "application/epub+zip" || mimetype == null && zip.getEntry("META-INF/container.xml") != null) {
+            if (EpubReader.isDrmProtected(zip)) throw UnsupportedDocumentException(EPUB_DRM)
+            return DocumentKind.Epub
+        }
         throw UnsupportedDocumentException(
             when {
-                mimetype == "application/epub+zip" -> EPUB
                 mimetype?.startsWith("application/vnd.oasis.opendocument.spreadsheet") == true ||
                     zip.getEntry("xl/workbook.xml") != null -> SPREADSHEET
                 mimetype?.startsWith("application/vnd.oasis.opendocument.presentation") == true ||

@@ -20,6 +20,7 @@ object DocumentText {
             when (kind) {
                 DocumentKind.Docx -> DocxReader.read(file, builder)
                 DocumentKind.Odt -> OdtReader.read(file, builder)
+                DocumentKind.Epub -> EpubReader.read(file, builder)
                 DocumentKind.Rtf -> RtfReader.read(file, builder)
                 DocumentKind.Html, DocumentKind.Markdown, DocumentKind.PlainText -> {
                     val decoded = TextDecoding.read(file, html = kind == DocumentKind.Html)
@@ -53,6 +54,7 @@ object DocumentText {
     private fun damaged(kind: DocumentKind): String = "Die Datei ist beschädigt oder " + when (kind) {
         DocumentKind.Docx -> "kein gültiges Word-Dokument."
         DocumentKind.Odt -> "kein gültiges OpenDocument-Dokument."
+        DocumentKind.Epub -> "kein gültiges E-Book (EPUB)."
         DocumentKind.Rtf -> "kein gültiges RTF-Dokument."
         DocumentKind.Html -> "keine gültige HTML-Datei."
         DocumentKind.Markdown -> "keine gültige Markdown-Datei."

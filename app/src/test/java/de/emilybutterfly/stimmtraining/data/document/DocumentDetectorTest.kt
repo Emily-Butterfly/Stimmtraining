@@ -65,7 +65,7 @@ class DocumentDetectorTest {
         val ods = TestDocuments.zip(File(dir, "t.ods"), "mimetype" to "application/vnd.oasis.opendocument.spreadsheet".toByteArray(), "content.xml" to "<x/>".toByteArray())
         assertTrue(assertThrows(UnsupportedDocumentException::class.java) { DocumentDetector.detect(ods, "t.ods", null) }.message!!.contains("Tabellen"))
         val epub = TestDocuments.zip(File(dir, "b.epub"), "mimetype" to "application/epub+zip".toByteArray())
-        assertTrue(assertThrows(UnsupportedDocumentException::class.java) { DocumentDetector.detect(epub, "b.epub", null) }.message!!.contains("EPUB"))
+        assertEquals(DocumentKind.Epub, DocumentDetector.detect(epub, "b.epub", null))
         val plainZip = TestDocuments.zip(File(dir, "a.zip"), "liesmich.txt" to "Hallo".toByteArray())
         assertTrue(assertThrows(UnsupportedDocumentException::class.java) { DocumentDetector.detect(plainZip, "a.zip", null) }.message!!.contains("Entpacke"))
     }

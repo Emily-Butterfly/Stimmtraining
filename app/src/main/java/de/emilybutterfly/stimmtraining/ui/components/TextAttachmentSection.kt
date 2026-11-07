@@ -277,8 +277,8 @@ fun TextAttachmentSection(
                     Text("Text zum Lesen", style = MaterialTheme.typography.titleSmall)
                     Text(
                         if (enabled) {
-                            "Fotografiere den Text, wähle ein Bild oder eine Datei (PDF, Word, OpenDocument, Text, " +
-                                "Markdown) oder füge ihn ein – er wird dir dann beim Aufnehmen angezeigt."
+                            "Fotografiere den Text, wähle ein Bild oder eine Datei (PDF, E-Book, Word, OpenDocument, " +
+                                "Text, Markdown) oder füge ihn ein – er wird dir dann beim Aufnehmen angezeigt."
                         } else {
                             "Während der Aufnahme lässt sich kein Text hinzufügen."
                         },

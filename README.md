@@ -22,8 +22,9 @@ Aufnahme festhalten, unter welchen Bedingungen sie entstanden ist, und alles sic
     automatisch richtig gedreht und verkleinert; in der Seitenübersicht lässt sich jede Seite
     in 90°-Schritten drehen, verschieben oder löschen – auch später beim Bearbeiten. Beim Lesen
     wischt man seitwärts von Seite zu Seite.
-  - als **Datei**: PDF, Word (.docx), OpenDocument (.odt), RTF, HTML, Markdown (.md) oder
-    Text (.txt), bis 50 MB. Das Format erkennt die App am Inhalt. Alte Word-Dateien (.doc)
+  - als **Datei**: PDF, E-Book (EPUB, ohne Kopierschutz), Word (.docx), OpenDocument (.odt), RTF,
+    HTML, Markdown (.md) oder Text (.txt), bis 50 MB. E-Books werden als Text angezeigt (Kapitel in
+    Lesereihenfolge), der Lesefortschritt gilt wie bei anderen Texten satzgenau. Das Format erkennt die App am Inhalt. Alte Word-Dateien (.doc)
     gehen nicht – in Word oder LibreOffice als .docx oder PDF speichern.
   - **eingefügt** per Kopieren und Einfügen (oder getippt), bis 50.000 Zeichen. Eingefügte
     Texte und Textdateien lassen sich später bearbeiten.

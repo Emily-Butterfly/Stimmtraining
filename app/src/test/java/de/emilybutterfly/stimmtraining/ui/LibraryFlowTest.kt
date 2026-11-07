@@ -376,6 +376,24 @@ class LibraryFlowTest {
     }
 
     @Test
+    fun anEbookIsReadOverTwoRecordingsLikeAnyOtherText() {
+        val chapter = { body: String -> "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body>$body</body></html>".toByteArray() }
+        val epub = de.emilybutterfly.stimmtraining.data.document.TestDocuments.zip(
+            container.files.newDraftFile("epub"),
+            "mimetype" to "application/epub+zip".toByteArray(),
+            "a.xhtml" to chapter("<h1>Eins</h1><p>Erster Satz. Zweiter Satz.</p>"),
+            "b.xhtml" to chapter("<p>Dritter Satz.</p>"),
+        )
+        val id = runBlocking { library.add(TextAttachment.Document(epub, "Buch.epub"), "Buch", move = true) }
+        val (first, _) = finishedTake(id)
+        first.markLibraryEnd(after("Erster Satz."))
+        assertEquals("Eins\n\nErster Satz.", sectionText(save(first)))
+        val (second, _) = finishedTake(id)
+        assertEquals("Zweiter Satz.\n\nDritter Satz.", sectionText(save(second)))
+        assertNotNull(runBlocking { library.get(id)!! }.finishedAt)
+    }
+
+    @Test
     fun orphanedLibraryFilesAreCleanedButUsedOnesStay() = runBlocking {
         val id = addStory()
         val used = library.attachmentOf(library.get(id)!!)!!.files.single()
