@@ -164,13 +164,23 @@ fun RecordScreen(
     val attachedDocument = shownText as? TextAttachment.Document
     val documentContent = attachedDocument?.let { document -> key(document.file) { rememberDocumentContent(document).value } }
 
+    // Läuft die Frage nach dem Mikrofon schon, löst ein zweiter Tipp keine zweite aus: Android
+    // würde sie sofort ablehnen und die echte Antwort zurückhalten.
+    var askingPermission by rememberSaveable { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        askingPermission = false
         if (granted) viewModel.startRecording() else permissionDenied = true
     }
     val startRecording = {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
-        if (granted) viewModel.startRecording() else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        when {
+            granted -> viewModel.startRecording()
+            !askingPermission -> {
+                askingPermission = true
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
     }
 
     // Gespeichert: zur Aufnahme wechseln – mit dem Rückruf dieser Ansicht, nicht einem von vor dem Drehen.
@@ -306,7 +316,12 @@ fun RecordScreen(
                     )
                 }
                 if (state.phase == RecorderPhase.Done) {
-                    PitchCard(result = state.pitch, progress = state.pitchProgress, onAnalyze = viewModel::analyzePitch)
+                    PitchCard(
+                        result = state.pitch,
+                        progress = state.pitchProgress,
+                        onAnalyze = viewModel::analyzePitch,
+                        enabled = !state.saving,
+                    )
                 }
                 guide?.let { GuideCard(it) }
                 if (library != null && marks != null) {
@@ -660,6 +675,13 @@ private fun RecorderPanel(
                         }
                     }
                     LevelMeter(state.level)
+                    if (state.micSilenced) {
+                        Text(
+                            "Eine andere App benutzt gerade das Mikrofon – aufgenommen wird nur Stille.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
                         FilledTonalIconButton(onClick = onPauseResume, modifier = Modifier.size(56.dp)) {
                             if (state.phase == RecorderPhase.Recording) {

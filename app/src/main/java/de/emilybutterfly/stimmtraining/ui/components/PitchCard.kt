@@ -40,7 +40,7 @@ import kotlin.math.roundToInt
  * Im sanften Modus erscheint nichts; ein Knopf auf der Karte schaltet ihn sofort ein.
  */
 @Composable
-fun PitchCard(result: PitchResult?, progress: Float?, onAnalyze: () -> Unit, modifier: Modifier = Modifier) {
+fun PitchCard(result: PitchResult?, progress: Float?, onAnalyze: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     if (gentleMode()) return
     val settings = LocalAppSettings.current
     val context = LocalContext.current
@@ -51,7 +51,7 @@ fun PitchCard(result: PitchResult?, progress: Float?, onAnalyze: () -> Unit, mod
                 Spacer(Modifier.width(8.dp))
                 Text("Tonhöhe", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                 if (result != null && progress == null) {
-                    TextButton(onClick = onAnalyze) { Text("Neu analysieren") }
+                    TextButton(onClick = onAnalyze, enabled = enabled) { Text("Neu analysieren") }
                 }
                 if (settings != null) {
                     IconButton(onClick = {
@@ -81,7 +81,7 @@ fun PitchCard(result: PitchResult?, progress: Float?, onAnalyze: () -> Unit, mod
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Button(onClick = onAnalyze, modifier = Modifier.fillMaxWidth()) { Text("Tonhöhe analysieren") }
+                    Button(onClick = onAnalyze, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("Tonhöhe analysieren") }
                 }
                 most == null || lowest == null || highest == null -> Text(
                     "In dieser Aufnahme wurde zu wenig Stimme erkannt.",
@@ -121,5 +121,11 @@ private fun NoteTile(label: String, midi: Int, modifier: Modifier = Modifier, hi
     }
 }
 
-private fun formatSpokenTime(millis: Long): String =
-    if (millis < 60_000) "${(millis + 500) / 1000} s" else "${formatDuration(millis)} min"
+private fun formatSpokenTime(millis: Long): String {
+    val seconds = (millis + 500) / 1000
+    return when {
+        seconds < 60 -> "$seconds s"
+        seconds < 3600 -> "${formatDuration(millis)} min"
+        else -> "${formatDuration(millis)} h"
+    }
+}

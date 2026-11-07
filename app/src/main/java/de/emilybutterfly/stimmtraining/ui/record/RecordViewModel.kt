@@ -101,6 +101,8 @@ data class RecordUiState(
      * Rückruf, damit es auch nach dem Drehen oder einem Neustart durch Android ankommt.
      */
     val savedId: Long? = null,
+    /** Eine andere App hat gerade das Mikrofon; aufgenommen wird Stille. */
+    val micSilenced: Boolean = false,
     val message: String? = null,
     /** Ausgangswerte des Formulars, z. B. mit vorausgefüllter Übung. */
     val initialParams: RecordingParams = RecordingParams(),
@@ -129,7 +131,12 @@ class RecordViewModel(
     private val savedState: SavedStateHandle,
     private val freeBytes: () -> Long = { container.files.freeBytes() },
 ) : ViewModel() {
-    private val recorder = AudioRecorder(app)
+    private val recorder = AudioRecorder(app).also { recorder ->
+        recorder.onError = { viewModelScope.launch { onRecorderError() } }
+    }
+
+    /** Hat Android die laufende Aufnahme abgebrochen? Dann ehrlich melden statt „zu kurz“. */
+    private var recorderFailed = false
     private val hadSavedParams = savedState.contains("$KEY_PARAMS.title")
     private val _state = MutableStateFlow(restore())
     val state: StateFlow<RecordUiState> = _state.asStateFlow()
@@ -559,6 +566,15 @@ class RecordViewModel(
 
     fun dismissStorageWarning() = _state.update { it.copy(storageWarning = null) }
 
+    private fun onRecorderError() {
+        if (!_state.value.isRecording) return
+        recorderFailed = true
+        stopRecording()
+        if (_state.value.phase == RecorderPhase.Done) {
+            _state.update { it.copy(message = "Android hat die Aufnahme abgebrochen. Was bis dahin aufgenommen war, ist erhalten.") }
+        }
+    }
+
     /** Bevor der Speicher vollläuft, endet die Aufnahme sauber und bleibt abspielbar. */
     private fun onStorageLimitReached() {
         if (!_state.value.isRecording) return
@@ -575,7 +591,8 @@ class RecordViewModel(
             RecorderPhase.Recording -> {
                 try {
                     recorder.pause()
-                } catch (_: IllegalStateException) {
+                } catch (_: RuntimeException) {
+                    // Falscher Zustand oder ein Fehler des Mediendienstes: nichts ändern, nicht abstürzen.
                     return
                 }
                 accumulatedMs += SystemClock.elapsedRealtime() - segmentStartedAt
@@ -585,7 +602,8 @@ class RecordViewModel(
             RecorderPhase.Paused -> {
                 try {
                     recorder.resume()
-                } catch (_: IllegalStateException) {
+                } catch (_: RuntimeException) {
+                    // Falscher Zustand oder ein Fehler des Mediendienstes: nichts ändern, nicht abstürzen.
                     return
                 }
                 segmentStartedAt = SystemClock.elapsedRealtime()
@@ -607,6 +625,8 @@ class RecordViewModel(
         // Hat Android die Aufnahme schon selbst beendet (Speichergrenze), kann stop() scheitern,
         // obwohl die Datei vollständig ist.
         val usable = file != null && file.isFile && file.length() > 0 && (ok || AudioRecorder.durationOf(file) != null)
+        val failed = recorderFailed
+        recorderFailed = false
         if (!usable) {
             file?.delete()
             _state.update {
@@ -615,7 +635,13 @@ class RecordViewModel(
                     elapsedMs = 0,
                     level = 0f,
                     recordedAt = null,
-                    message = "Die Aufnahme war zu kurz und wurde verworfen.",
+                    // Eine Markierung dieses Versuchs gilt nicht für den nächsten: „Bis zum Ende“ ist wieder vorausgewählt.
+                    library = it.library?.copy(end = null),
+                    message = if (failed) {
+                        "Android hat die Aufnahme abgebrochen; es ließ sich nichts davon retten. Bitte nimm noch einmal auf."
+                    } else {
+                        "Die Aufnahme war zu kurz und wurde verworfen."
+                    },
                 )
             }
             return
@@ -623,6 +649,7 @@ class RecordViewModel(
         _state.update {
             it.copy(
                 phase = RecorderPhase.Done,
+                micSilenced = false,
                 level = 0f,
                 audio = file,
                 elapsedMs = accumulatedMs,
@@ -786,6 +813,8 @@ class RecordViewModel(
                         onStorageLimitReached()
                         return@launch
                     }
+                    val silenced = recorder.isSilenced()
+                    if (silenced != _state.value.micSilenced) _state.update { it.copy(micSilenced = silenced) }
                 }
                 delay(80)
             }

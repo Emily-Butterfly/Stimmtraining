@@ -45,6 +45,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -324,6 +326,9 @@ class DetailViewModel(
             try {
                 val result = PitchAnalyzer.analyzeFile(audioFile(recording)) { _pitchProgress.value = it }
                 withContext(NonCancellable) { container.repository.savePitch(id, result) }
+                // Den Fortschritt erst wegnehmen, wenn das Ergebnis angezeigt wird: Sonst blitzt kurz
+                // wieder „Tonhöhe analysieren“ auf, und ein Tipp darauf startet alles noch einmal.
+                withTimeoutOrNull(2_000) { load.first { (it as? DetailLoad.Ready)?.recording?.pitchVoicedMs != null } }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

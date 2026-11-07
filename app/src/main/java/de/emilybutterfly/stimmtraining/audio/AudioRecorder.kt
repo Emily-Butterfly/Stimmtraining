@@ -13,6 +13,12 @@ class AudioRecorder(private val context: Context) {
 
     val isActive: Boolean get() = recorder != null
 
+    /**
+     * Wird aufgerufen, wenn Android die Aufnahme abbricht (z. B. weil der Mediendienst neu startet).
+     * Sonst liefe die Zeit weiter, während nichts mehr aufgenommen wird.
+     */
+    var onError: (() -> Unit)? = null
+
     fun start(output: File) {
         check(recorder == null) { "Aufnahme läuft bereits" }
         val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -31,6 +37,7 @@ class AudioRecorder(private val context: Context) {
             // Bewusst ohne setMaxFileSize: Damit reserviert Android in jeder Datei bis zu 400 KB
             // für das Inhaltsverzeichnis. Den Speicher überwacht stattdessen RecordViewModel.
             r.setOutputFile(output.absolutePath)
+            r.setOnErrorListener { _, _, _ -> onError?.invoke() }
             r.prepare()
             r.start()
         } catch (e: Exception) {
@@ -40,6 +47,7 @@ class AudioRecorder(private val context: Context) {
         recorder = r
     }
 
+    /** Wirft bei einem Fehler des Rekorders (nicht nur im falschen Zustand) eine RuntimeException. */
     fun pause() {
         recorder?.pause()
     }
@@ -48,11 +56,25 @@ class AudioRecorder(private val context: Context) {
         recorder?.resume()
     }
 
+    /**
+     * Ob Android das Mikrofon gerade einer anderen App gibt (Anruf, Assistent …): Dann kommt nur
+     * Stille an. Erst ab Android 10 abfragbar.
+     */
+    fun isSilenced(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        return try {
+            recorder?.activeRecordingConfiguration?.isClientSilenced == true
+        } catch (_: RuntimeException) {
+            false
+        }
+    }
+
     /** Aktueller Pegel zwischen 0 und 1 (logarithmisch, -50 dB … 0 dB). */
     fun level(): Float {
+        // Bei einem Fehler des Mediendienstes wirft das eine einfache RuntimeException.
         val amplitude = try {
             recorder?.maxAmplitude ?: 0
-        } catch (_: IllegalStateException) {
+        } catch (_: RuntimeException) {
             0
         }
         if (amplitude <= 0) return 0f

@@ -26,6 +26,8 @@ internal object AudioDecoder {
     private const val TIMEOUT_US = 10_000L
 
     /** Ohne jeden Fortschritt so lange gilt der Decoder als hängen geblieben. */
+    /** Ab diesem Anteil der Dauer gilt eine Datei als fertig dekodiert, auch ohne Endesignal. */
+    private const val COMPLETE_FRACTION = 0.95
     private const val STALL_TIMEOUT_MS = 10_000L
 
     /** Ein Durchlauf wartet höchstens ~10 ms; eine Sekunde Lücke kann nur ein Einfrieren sein. */
@@ -186,6 +188,8 @@ internal object AudioDecoder {
             if (active) {
                 lastActivity = now
             } else if ((now - lastActivity) / 1_000_000 > STALL_TIMEOUT_MS) {
+                // Manche Decoder melden das Ende nie. Ist schon (fast) alles dekodiert, gilt das als Ende.
+                if (inputDone && durationUs > 0 && decodedUs >= durationUs * COMPLETE_FRACTION) break
                 throw IOException("Der Audio-Decoder reagiert nicht mehr")
             }
         }
@@ -286,7 +290,9 @@ internal object AudioDecoder {
             for (f in 0 until frames) {
                 var sum = 0f
                 for (c in 0 until channels) sum += sample(v++)
-                mono[f] = sum * factor
+                // Ein einziger NaN- oder unendlicher Wert würde die Filter dauerhaft vergiften.
+                val value = sum * factor
+                mono[f] = if (value.isFinite()) value else 0f
             }
             return frames
         }
