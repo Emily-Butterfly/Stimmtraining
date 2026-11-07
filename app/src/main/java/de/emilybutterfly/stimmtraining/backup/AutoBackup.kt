@@ -18,6 +18,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -51,8 +52,7 @@ class AutoBackup(
             if (tree == null || !tree.isDirectory || !tree.canWrite()) {
                 throw IOException("Kein Zugriff auf den Backup-Ordner. Bitte den Ordner neu wählen.")
             }
-            val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.ROOT).format(Date())
-            val document = tree.createFile("application/zip", "$FILE_PREFIX$stamp.zip")
+            val document = tree.createFile("application/zip", fileName(Date(), settings.installId))
                 ?: throw IOException("Die Backup-Datei konnte nicht angelegt werden.")
             val count = try {
                 BackupManager.openForWriting(context.contentResolver, document.uri).use { manager.export(it) }.recordings
@@ -60,7 +60,7 @@ class AutoBackup(
                 document.delete()
                 throw e
             }
-            prune(tree)
+            prune(tree, keep = document.name)
             settings.recordSuccess(System.currentTimeMillis(), count, fingerprint)
             true
         } catch (e: CancellationException) {
@@ -71,25 +71,43 @@ class AutoBackup(
         }
     }
 
-    private fun prune(tree: DocumentFile) {
+    private fun prune(tree: DocumentFile, keep: String?) {
         val files = tree.listFiles().filter { it.isFile }
-        val obsolete = obsoleteBackups(files.mapNotNull { it.name }).toSet()
+        val obsolete = obsoleteBackups(files.mapNotNull { it.name }, settings.installId, keep).toSet()
         files.filter { it.name in obsolete }.forEach { it.delete() }
     }
 
     companion object {
         const val FILE_PREFIX = "Stimmtraining-Auto-Backup-"
         const val KEEP = 5
-
-        /** Nur genau so benannte Dateien stammen vom automatischen Backup. */
-        private val AUTO_BACKUP_NAME = Regex("""Stimmtraining-Auto-Backup-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.zip""")
+        val INSTALL_ID = Regex("[0-9a-f]{8}")
 
         /**
-         * Die automatischen Sicherungen, die über die neuesten [KEEP] hinausgehen. Andere
-         * Dateien im Ordner (z. B. manuelle Sicherungen) werden nie angefasst.
+         * Nur genau so benannte Dateien stammen vom automatischen Backup: Zeit in UTC (sortiert auch
+         * über die Zeitumstellung hinweg richtig) und Kennung der Installation. Ältere Versionen
+         * schrieben Ortszeit ohne Kennung.
          */
-        fun obsoleteBackups(names: List<String>): List<String> =
-            names.filter { AUTO_BACKUP_NAME.matches(it) }.sortedDescending().drop(KEEP)
+        private val AUTO_BACKUP_NAME =
+            Regex("""Stimmtraining-Auto-Backup-(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})(?:Z-([0-9a-f]{8}))?\.zip""")
+
+        fun fileName(at: Date, installId: String): String {
+            val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(at)
+            return "$FILE_PREFIX${stamp}Z-$installId.zip"
+        }
+
+        /**
+         * Die automatischen Sicherungen dieser Installation (und solche ohne Kennung aus älteren
+         * Versionen), die über die neuesten [KEEP] hinausgehen. Nie gelöscht werden: [keep] (die
+         * gerade angelegte – auch wenn die Uhr des Geräts falsch geht), Sicherungen anderer Geräte
+         * im selben Ordner und andere Dateien (z. B. manuelle Sicherungen).
+         */
+        fun obsoleteBackups(names: List<String>, installId: String, keep: String? = null): List<String> =
+            names.mapNotNull { name -> AUTO_BACKUP_NAME.matchEntire(name)?.let { name to it } }
+                .filter { (_, match) -> match.groups[2]?.value.let { it == null || it == installId } }
+                .sortedByDescending { (name, match) -> if (name == keep) "~" else match.groupValues[1] }
+                .drop(KEEP)
+                .map { it.first }
+                .filter { it != keep }
     }
 }
 

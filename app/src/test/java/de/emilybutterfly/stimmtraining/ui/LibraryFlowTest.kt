@@ -11,7 +11,13 @@ import de.emilybutterfly.stimmtraining.data.document.DocumentText
 import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
 import de.emilybutterfly.stimmtraining.data.library.TextLayout
 import de.emilybutterfly.stimmtraining.data.library.TextProgress
+import de.emilybutterfly.stimmtraining.ui.library.LibraryLoad
+import de.emilybutterfly.stimmtraining.ui.library.LibraryTextViewModel
 import de.emilybutterfly.stimmtraining.ui.record.RecordViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -309,6 +315,64 @@ class LibraryFlowTest {
         val lastShown = layout.sentences(layout.blockStarts.size - 1).last()
         library.setProgress(id, TextProgress.after(layout, lastShown))
         assertNull("bleibt unter „Zu lesen“", library.get(id)!!.finishedAt)
+    }
+
+    @Test
+    fun readingAShortenedTextToTheEndOfWhatIsShownKeepsItToRead() {
+        val long = "Ein Satz zum Lesen. ".repeat(20_000)
+        val id = runBlocking {
+            library.add(TextAttachment.Document(container.files.newDraftFile("txt").apply { writeText(long) }, "Roman"), "Roman", move = true)
+        }
+        // „Bis zum Ende“ von vorne: Das ist nur das Ende des angezeigten Teils.
+        val (take, _) = finishedTake(id)
+        assertNull(take.state.value.library!!.end)
+        save(take)
+        val afterFirst = runBlocking { library.get(id)!! }
+        assertNull("bleibt unter „Zu lesen“", afterFirst.finishedAt)
+        assertNotNull("steht am angezeigten Ende", afterFirst.progress)
+
+        // Weiter ab einer Stelle, wieder „Bis zum Ende“: ebenso.
+        runBlocking { library.setProgress(id, after("Ein Satz zum Lesen.")) }
+        val (again, _) = finishedTake(id)
+        save(again)
+        assertNull(runBlocking { library.get(id)!! }.finishedAt)
+    }
+
+    @Test
+    fun choosingTheSameTextAgainKeepsTheMarkedPosition() {
+        val id = addStory()
+        val (take, _) = finishedTake(id)
+        val mark = after("Dritter Satz.")
+        take.markLibraryEnd(mark)
+        take.selectLibraryText(id)
+        waitFor { !take.state.value.attachmentBusy && take.state.value.library != null }
+        assertEquals(mark, take.state.value.library!!.end)
+    }
+
+    @Test
+    fun aTypedTagIsSavedWithoutConfirmingAndKnownSpellingsAreReused() {
+        val id = runBlocking {
+            library.add(TextAttachment.Document(container.files.newDraftFile("txt").apply { writeText(story) }, "Geschichte"), "Geschichte", listOf("Gedicht"), move = true)
+        }
+        val viewModel = LibraryTextViewModel(id, app, container, SavedStateHandle())
+        val scope = CoroutineScope(Dispatchers.Main)
+        viewModel.knownTags.launchIn(scope)
+        try {
+            waitFor { viewModel.load.value is LibraryLoad.Ready && viewModel.knownTags.value.isNotEmpty() }
+            viewModel.startEdit()
+            // Komma und Semikolon trennen; „gedicht“ wird zum schon bekannten „Gedicht“.
+            viewModel.updateTagInput("gedicht, Lyrik; ")
+            assertEquals(listOf("Gedicht", "Lyrik"), viewModel.edit.value!!.tags)
+            assertEquals("", viewModel.edit.value!!.tagInput)
+            // Getippt, aber nicht mit „+“ bestätigt: kommt beim Speichern trotzdem mit.
+            viewModel.updateTagInput("Rilke")
+            assertTrue(viewModel.hasChanges())
+            viewModel.save()
+            waitFor { viewModel.edit.value == null }
+            assertEquals(listOf("Gedicht", "Lyrik", "Rilke"), runBlocking { library.get(id)!! }.tagList)
+        } finally {
+            scope.cancel()
+        }
     }
 
     @Test

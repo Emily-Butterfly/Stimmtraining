@@ -1,5 +1,6 @@
 package de.emilybutterfly.stimmtraining.ui.backup
 
+import de.emilybutterfly.stimmtraining.ui.components.recordingCount
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
@@ -84,7 +85,7 @@ class BackupViewModel(
     fun export(uri: Uri) = runOperation {
         val result = container.backupManager.exportTo(uri)
         val texts = if (result.texts == 1) "1 Text" else "${result.texts} Texte"
-        "Sicherung gespeichert (${result.recordings} Aufnahmen, $texts der Bibliothek)."
+        "Sicherung gespeichert (${recordingCount(result.recordings)}, $texts der Bibliothek)."
     }
 
     fun import(uri: Uri) = runOperation {

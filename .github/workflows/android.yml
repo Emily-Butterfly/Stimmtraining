@@ -5,13 +5,39 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Standardmäßig nur lesen; Schreibrechte bekommt allein der Schritt, der das Release anlegt.
+permissions:
+  contents: read
+
 jobs:
+  # Tests ohne Zugriff auf den Signatur-Schlüssel: Was hier läuft (Testcode, Gradle-Plugins),
+  # bekommt das Secret nie zu sehen.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Tests ausführen
+        run: ./gradlew --no-daemon testDebugUnitTest
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write # für das Veröffentlichen der APK als Release
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-java@v5
         with:
@@ -62,11 +88,15 @@ jobs:
           echo "SIGNING_NOTE=$NOTE" >> "$GITHUB_ENV"
           echo "$NOTE" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Tests ausführen und APK bauen
+      - name: APK bauen
         env:
           STIMM_KEYSTORE_PASSWORD: ${{ secrets.STIMM_KEYSTORE_PASSWORD }}
           VERSION_CODE: ${{ github.run_number }}
-        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Schlüsseldatei entfernen
+        if: always()
+        run: rm -f "$RUNNER_TEMP/stimmtraining.jks"
 
       - name: APK benennen
         run: cp app/build/outputs/apk/release/app-release.apk "Stimmtraining-1.0.${{ github.run_number }}.apk"
@@ -82,6 +112,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: v1.0.${{ github.run_number }}
         run: |
+          # Ohne festen Schlüssel kein Release: Eine so signierte APK ließe sich nicht als Update
+          # installieren. Die APK bleibt als Artefakt des Laufs zum Ausprobieren.
+          if [ -z "$STIMM_KEYSTORE_FILE" ]; then
+            echo "::error title=Kein Release::Ohne festen Signatur-Schlüssel wird kein Release veröffentlicht (siehe README)."
+            exit 1
+          fi
           # Bei "Re-run" gibt es das Release schon; dann nur die APK ersetzen.
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" Stimmtraining-*.apk --clobber

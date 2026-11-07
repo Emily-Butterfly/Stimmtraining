@@ -104,8 +104,8 @@ installierte Version. Der Schlüssel liegt verschlüsselt im Repository
 2. Name: `STIMM_KEYSTORE_KEY`, Wert: das Passwort (24 Zeichen in vier Sechsergruppen).
 
 Leerzeichen oder Zeilenumbrüche, die beim Kopieren hineingeraten, werden ignoriert. Im Log des
-Builds und in den Release-Notizen steht, ob mit dem festen Schlüssel signiert wurde (mit
-SHA-256-Fingerabdruck) oder mit einem Übergangsschlüssel.
+Builds und in den Release-Notizen steht der SHA-256-Fingerabdruck des Schlüssels. Die Tests
+laufen in einem eigenen Job ohne Zugriff auf den Schlüssel.
 
 Alternativ kann der ganze Keystore als Base64 im Secret `STIMM_KEYSTORE_BASE64` stehen
 (Alias `stimmtraining`, Store- und Key-Passwort gleich, Standard `stimmtraining`, sonst als
@@ -118,9 +118,10 @@ keytool -genkeypair -keystore stimmtraining.jks -storetype PKCS12 -alias stimmtr
 base64 -w0 stimmtraining.jks   # Ausgabe als Secret STIMM_KEYSTORE_BASE64 eintragen
 ```
 
-Ohne gültigen Schlüssel baut GitHub trotzdem eine APK, aber mit einem Übergangsschlüssel. Eine
-spätere Version mit festem Schlüssel lässt sich dann nur nach Deinstallation installieren:
-vorher in der App ein Backup erstellen, danach wiederherstellen.
+Ohne gültigen Schlüssel baut GitHub trotzdem eine APK (unter *Artifacts*), aber mit einem
+Übergangsschlüssel, und veröffentlicht **kein** Release: Eine solche APK ließe sich nicht als
+Update installieren. Wer sie trotzdem installiert, kann eine spätere Version mit festem Schlüssel
+nur nach Deinstallation installieren: vorher in der App ein Backup erstellen, danach wiederherstellen.
 
 ## Entwickeln
 

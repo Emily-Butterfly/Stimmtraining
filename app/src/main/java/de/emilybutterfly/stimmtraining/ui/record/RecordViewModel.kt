@@ -328,7 +328,9 @@ class RecordViewModel(
     /** Wählt einen Text der Bibliothek; ein eigener Anhang wird dabei verworfen. */
     fun selectLibraryText(id: Long) {
         if (_state.value.isRecording || _state.value.saving) return
-        loadLibraryText(id, end = null) {}
+        // Derselbe Text noch einmal gewählt (z. B. versehentlich): die schon markierte Stelle bleibt.
+        val same = _state.value.library?.takeIf { it.textId == id }
+        loadLibraryText(id, end = same?.end) {}
     }
 
     private fun loadLibraryText(id: Long, end: ReadingPosition?, done: () -> Unit) {
@@ -781,7 +783,7 @@ class RecordViewModel(
                     if (reading != null && section != null) {
                         // Die Aufnahme ist gespeichert; ein Fehler beim Fortschritt soll sie nicht kosten.
                         runCatching {
-                            container.library.recordReading(reading.textId, if (section.finished) null else reading.end, section.fraction)
+                            container.library.recordReading(reading.textId, if (section.finished) null else section.end ?: reading.end, section.fraction)
                         }
                     }
                     id

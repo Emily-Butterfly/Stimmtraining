@@ -182,7 +182,7 @@ internal object DraftPages {
      */
     suspend fun rotate(files: FileStore, photo: TextAttachment.Photo, index: Int, clockwise: Boolean): TextAttachment.Photo {
         val page = photo.pages.getOrNull(index) ?: return photo
-        files.requireSpaceFor(page.length() * 2)
+        files.requireSpaceFor { page.length() * 2 }
         val rotated = createDraft({ it }) {
             val target = files.newDraftFile("jpg")
             try {
@@ -211,7 +211,7 @@ internal object DraftPages {
      * Original anzufassen – bis zum Speichern lässt sich alles verwerfen.
      */
     suspend fun copyToDrafts(files: FileStore, photo: TextAttachment.Photo): TextAttachment.Photo {
-        files.requireSpaceFor(photo.pages.sumOf { it.length() })
+        files.requireSpaceFor { photo.pages.sumOf { it.length() } }
         val copies = mutableListOf<File>()
         try {
             withContext(Dispatchers.IO) {
@@ -231,9 +231,11 @@ internal object DraftPages {
 }
 
 /** Bricht mit verständlicher Meldung ab, wenn für [bytes] kein Platz mehr ist (die Reserve bleibt frei). */
-fun FileStore.requireSpaceFor(bytes: Long) {
+suspend fun FileStore.requireSpaceFor(bytes: () -> Long) = withContext(Dispatchers.IO) {
+    // Dateigrößen und freier Speicher fragen das Dateisystem: nicht auf dem Hauptthread.
+    val needed = bytes()
     val space = freeBytes() - FileStore.RESERVE_BYTES
-    if (bytes > space) {
+    if (needed > space) {
         throw DocumentReadException("Nicht genug Speicherplatz (nutzbar sind noch ${formatBytes(space.coerceAtLeast(0))}).")
     }
 }

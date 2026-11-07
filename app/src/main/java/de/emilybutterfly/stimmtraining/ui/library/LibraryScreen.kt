@@ -62,6 +62,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.takeWhole
 import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import de.emilybutterfly.stimmtraining.data.library.LibraryText
 import de.emilybutterfly.stimmtraining.ui.app
@@ -105,10 +106,12 @@ class LibraryViewModel(
     }
 
     val ui: StateFlow<LibraryUi> = combine(repository.observeAll(), matches, query, tag, finishedTab) { all, found, q, t, finished ->
-        val tags = all.flatMap { it.tagList }.groupingBy { it }.eachCount().entries
-            .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
-            .map { it.key }
-        val selectedTag = t?.takeIf { it in tags }
+        // „Gedicht“ und „gedicht“ sind ein Schlagwort; gezeigt wird die häufigste Schreibweise.
+        val tags = all.flatMap { it.tagList }.groupBy { it.lowercase() }.values
+            .map { spellings -> spellings.groupingBy { it }.eachCount().maxBy { it.value }.key to spellings.size }
+            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first.lowercase() })
+            .map { it.first }
+        val selectedTag = t?.let { selected -> tags.firstOrNull { it.equals(selected, ignoreCase = true) } }
         val shown = all
             .filter { it.isFinished == finished }
             .filter { found == null || it.id in found }
@@ -128,7 +131,7 @@ class LibraryViewModel(
     fun attachment(text: LibraryText): TextAttachment? = repository.attachmentOf(text)
 
     fun setQuery(value: String) {
-        savedState[KEY_QUERY] = value.take(100)
+        savedState[KEY_QUERY] = value.takeWhole(100)
     }
 
     fun toggleTag(value: String) {
@@ -172,7 +175,7 @@ fun LibraryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (onPick != null) "Text auswählen" else "Bibliothek") },
+                title = { Text(if (onPick != null) "Text auswählen" else "Bibliothek", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")

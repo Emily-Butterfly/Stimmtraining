@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import de.emilybutterfly.stimmtraining.data.FileStore
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -147,13 +148,26 @@ class DetailViewModel(
 
     fun startEdit() {
         val recording = current ?: return
+        attachmentJob?.cancel()
         _edit.value = EditState(params = recording.params())
     }
 
     fun cancelEdit() {
+        // Ein noch laufender Import oder Seitenumbau darf nicht in eine spätere Bearbeitung schreiben.
+        attachmentJob?.cancel()
         discardAttachmentDraft()
         _edit.value = null
     }
+
+    /** Gibt es beim Bearbeiten etwas zu verlieren? Dann fragt „Abbrechen“ nach. */
+    fun hasChanges(): Boolean {
+        val edit = _edit.value ?: return false
+        val recording = current ?: return false
+        return edit.attachmentChange != AttachmentChange.Keep || edit.params != recording.params()
+    }
+
+    /** Der laufende Import bzw. Seitenumbau der aktuellen Bearbeitung. */
+    private var attachmentJob: Job? = null
 
     fun updateParams(params: RecordingParams) = _edit.update { it?.copy(params = params) }
 
@@ -211,7 +225,7 @@ class DetailViewModel(
         val recording = current ?: return
         if (edit.attachmentBusy) return
         if (requirePhoto && editedAttachment(recording, edit) !is TextAttachment.Photo) return
-        viewModelScope.launch {
+        attachmentJob = viewModelScope.launch {
             _edit.update { it?.copy(attachmentBusy = true) }
             try {
                 val photo = editablePhoto()
@@ -264,7 +278,7 @@ class DetailViewModel(
 
     private fun importAttachment(isPhoto: Boolean, load: suspend () -> TextAttachment) {
         if (_edit.value == null) return
-        viewModelScope.launch {
+        attachmentJob = viewModelScope.launch {
             _edit.update { it?.copy(attachmentBusy = true) }
             try {
                 val attachment = load()
@@ -274,6 +288,8 @@ class DetailViewModel(
                 } else {
                     _edit.update { it?.copy(attachmentChange = AttachmentChange.Replace(attachment), attachmentBusy = false) }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _edit.update { it?.copy(attachmentBusy = false) }
                 _message.value = importFailureMessage(isPhoto, e)
@@ -357,7 +373,7 @@ class DetailViewModel(
             try {
                 withContext(NonCancellable) {
                     val library = container.library
-                    files.requireSpaceFor(attachment.files.sumOf { it.length() })
+                    files.requireSpaceFor { attachment.files.sumOf { it.length() } }
                     library.add(attachment, library.suggestedTitle(attachment, LibraryRepository.photoTitle(attachment)), move = false)
                 }
                 _message.value = "In die Bibliothek gelegt – dort lässt sich der Text weiterlesen."
@@ -374,28 +390,30 @@ class DetailViewModel(
     /** Kopiert die Aufnahme mit lesbarem Dateinamen und liefert einen Teilen-Dialog. */
     fun share(onReady: (Intent) -> Unit) {
         val recording = current ?: return
+        // Doppeltipp: nur ein Teilen-Dialog.
+        if (sharing) return
+        sharing = true
         viewModelScope.launch {
             try {
+                val audio = audioFile(recording)
                 val uri = withContext(Dispatchers.IO) {
-                    val dir = File(app.cacheDir, "shared").apply {
-                        deleteRecursively()
-                        mkdirs()
-                    }
                     val stamp = SimpleDateFormat("yyyy-MM-dd_HH-mm", Locale.ROOT).format(Date(recording.recordedAt))
-                    val target = File(dir, "Stimmtraining_$stamp.${audioFile(recording).extension}")
-                    audioFile(recording).copyTo(target, overwrite = true)
-                    files.uriFor(target)
+                    files.uriFor(files.handoffCopy(FileStore.SHARE_DIR, audio, "Stimmtraining_$stamp"))
                 }
                 val send = Intent(Intent.ACTION_SEND)
-                    .setType("audio/mp4")
+                    .setType(FileStore.audioMimeType(audio.extension))
                     .putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 onReady(Intent.createChooser(send, "Aufnahme teilen"))
             } catch (e: Exception) {
                 _message.value = "Teilen nicht möglich: ${e.message}"
+            } finally {
+                sharing = false
             }
         }
     }
+
+    private var sharing = false
 
     /** Danach meldet [load] „gibt es nicht mehr“, und die Ansicht schließt sich. */
     fun delete() {

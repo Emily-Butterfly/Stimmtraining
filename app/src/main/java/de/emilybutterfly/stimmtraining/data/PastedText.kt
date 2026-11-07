@@ -20,7 +20,7 @@ object PastedText {
         val firstLine = text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }
             ?.replace(Regex("\\s+"), " ")
             ?: return "Eingefügter Text"
-        return if (firstLine.length <= 40) firstLine else firstLine.take(39).trimEnd() + "…"
+        return if (firstLine.length <= 40) firstLine else firstLine.takeWhole(39).trimEnd() + "…"
     }
 
     /** Speichert den Text als UTF-8-Entwurf; scheitert das, bleibt keine halbe Datei zurück. */

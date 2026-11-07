@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import de.emilybutterfly.stimmtraining.AppContainer
 import de.emilybutterfly.stimmtraining.data.AttachmentChange
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.takeWhole
 import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import de.emilybutterfly.stimmtraining.data.library.LibraryText
 import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
@@ -42,6 +43,8 @@ data class LibraryEdit(
     val tags: List<String> = emptyList(),
     val titleEdited: Boolean = false,
     val saving: Boolean = false,
+    /** Ein getipptes, noch nicht bestätigtes Schlagwort: Es wird beim Speichern mit übernommen. */
+    val tagInput: String = "",
 )
 
 /**
@@ -95,6 +98,7 @@ class LibraryTextViewModel(
                     savedState[KEY_TITLE] = edit.title
                     savedState[KEY_TAGS] = edit.tags.joinToString("\n")
                     savedState[KEY_TITLE_EDITED] = edit.titleEdited
+                    savedState[KEY_TAG_INPUT] = edit.tagInput
                 }
             }
         }
@@ -115,6 +119,7 @@ class LibraryTextViewModel(
             title = savedState[KEY_TITLE] ?: "",
             tags = savedState.get<String>(KEY_TAGS)?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
             titleEdited = savedState[KEY_TITLE_EDITED] ?: false,
+            tagInput = savedState[KEY_TAG_INPUT] ?: "",
         )
     }
 
@@ -140,15 +145,41 @@ class LibraryTextViewModel(
     fun hasChanges(): Boolean {
         val edit = _edit.value ?: return false
         val text = current
-        return editor.changed || if (text == null) edit.title.isNotBlank() || edit.tags.isNotEmpty() else edit.title != text.title || edit.tags != text.tagList
+        return editor.changed || edit.tagInput.isNotBlank() ||
+            if (text == null) edit.title.isNotBlank() || edit.tags.isNotEmpty() else edit.title != text.title || edit.tags != text.tagList
     }
 
-    fun updateTitle(title: String) = _edit.update { it?.copy(title = title.take(120), titleEdited = true) }
+    fun updateTitle(title: String) = _edit.update { it?.copy(title = title.takeWhole(LibraryRepository.MAX_TITLE), titleEdited = true) }
 
+    /** Das gerade getippte Schlagwort; mit Komma oder Semikolon wird es gleich übernommen. */
+    fun updateTagInput(input: String) {
+        val separator = input.indexOfLast { it == ',' || it == ';' }
+        if (separator >= 0) {
+            addTag(input.substring(0, separator))
+            _edit.update { it?.copy(tagInput = input.substring(separator + 1).trimStart().takeWhole(LibraryText.MAX_TAG_LENGTH)) }
+        } else {
+            _edit.update { it?.copy(tagInput = input.takeWhole(LibraryText.MAX_TAG_LENGTH)) }
+        }
+    }
+
+    /** Fügt das getippte Schlagwort hinzu. */
+    fun addTagInput() {
+        val input = _edit.value?.tagInput ?: return
+        addTag(input)
+        _edit.update { it?.copy(tagInput = "") }
+    }
+
+    /**
+     * Fügt Schlagworte hinzu („Gedicht, Lyrik“ ergibt zwei). Schon bekannte übernehmen ihre
+     * Schreibweise, damit „gedicht“ und „Gedicht“ nicht als zwei Schlagworte erscheinen.
+     */
     fun addTag(tag: String) {
-        val clean = tag.replace(Regex("\\s+"), " ").trim().take(LibraryText.MAX_TAG_LENGTH)
+        val known = knownTags.value
+        val clean = LibraryText.splitTags(tag).map { new -> known.firstOrNull { it.equals(new, ignoreCase = true) } ?: new }
         if (clean.isEmpty()) return
-        _edit.update { edit -> edit?.copy(tags = if (edit.tags.any { it.equals(clean, ignoreCase = true) }) edit.tags else edit.tags + clean) }
+        _edit.update { edit ->
+            edit?.copy(tags = (edit.tags + clean.filter { new -> edit.tags.none { it.equals(new, ignoreCase = true) } }))
+        }
     }
 
     fun removeTag(tag: String) = _edit.update { edit -> edit?.copy(tags = edit.tags - tag) }
@@ -156,8 +187,9 @@ class LibraryTextViewModel(
     fun cameraTarget() = container.files.prepareCameraCapture()
 
     fun save() {
+        if (_edit.value?.let { it.saving || editor.state.value.busy } != false) return
+        if (_edit.value?.tagInput?.isNotBlank() == true) addTagInput()
         val edit = _edit.value ?: return
-        if (edit.saving || editor.state.value.busy) return
         val state = editor.state.value
         _edit.value = edit.copy(saving = true)
         viewModelScope.launch {
@@ -264,6 +296,7 @@ class LibraryTextViewModel(
         private const val KEY_TITLE = "libraryTitle"
         private const val KEY_TAGS = "libraryTags"
         private const val KEY_TITLE_EDITED = "libraryTitleEdited"
+        private const val KEY_TAG_INPUT = "libraryTagInput"
 
         fun factory(id: Long?) = viewModelFactory {
             initializer {

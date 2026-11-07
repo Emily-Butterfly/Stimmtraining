@@ -1,5 +1,8 @@
 package de.emilybutterfly.stimmtraining.ui.list
 
+import de.emilybutterfly.stimmtraining.ui.components.recordingCount
+import java.time.LocalDate
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -114,7 +117,7 @@ fun RecordingListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Stimmtraining") },
+                title = { Text("Stimmtraining", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
                     if (!gentle) {
                         IconButton(onClick = onOpenPitchHistory) {
@@ -190,6 +193,7 @@ private fun RecordingList(
     val byDay = remember(recordings) { recordings.groupBy { localDate(it.recordedAt) } }
     val totalDuration = remember(recordings) { recordings.sumOf { it.durationMs } }
     val warmedUp = remember(recordings) { recordings.count { it.warmedUp } }
+    val today = rememberToday()
 
     LazyColumn(
         contentPadding = PaddingValues(
@@ -202,7 +206,7 @@ private fun RecordingList(
     ) {
         item(key = "summary") {
             Text(
-                "${recordings.size} Aufnahmen · ${formatDuration(totalDuration)} gesamt · $warmedUp aufgewärmt",
+                "${recordingCount(recordings.size)} · ${formatDuration(totalDuration)} gesamt · $warmedUp aufgewärmt",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -210,7 +214,7 @@ private fun RecordingList(
         byDay.forEach { (day, entries) ->
             item(key = "day-$day") {
                 Text(
-                    formatDay(day),
+                    formatDay(day, today),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
@@ -359,4 +363,18 @@ private fun EmptyState(onOpenTechniques: () -> Unit, modifier: Modifier = Modifi
             Text("Techniken & Übungen ansehen")
         }
     }
+}
+
+/**
+ * Das heutige Datum, neu gelesen bei jeder Rückkehr in die App: Bleibt die Liste über Nacht offen,
+ * heißen die Aufnahmen von gestern sonst weiter „Heute“.
+ */
+@Composable
+private fun rememberToday(): LocalDate {
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    LifecycleResumeEffect(Unit) {
+        today = LocalDate.now()
+        onPauseOrDispose { }
+    }
+    return today
 }

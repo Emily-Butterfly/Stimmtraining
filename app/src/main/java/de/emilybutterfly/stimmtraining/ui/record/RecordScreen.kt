@@ -235,7 +235,7 @@ fun RecordScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (reading) "Lesen" else "Neue Aufnahme") },
+                title = { Text(if (reading) "Lesen" else "Neue Aufnahme", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     // Im Lesemodus führt „Zurück“ wie die Zurück-Geste erst zum Formular.
                     IconButton(onClick = { if (reading) readingMode = false else requestClose() }) {
@@ -359,7 +359,7 @@ fun RecordScreen(
                     onPickFromLibrary = onPickFromLibrary,
                     onAddToLibrary = viewModel::addAttachmentToLibrary.takeIf { attachment != null },
                 )
-                ParameterForm(params = state.params, onChange = viewModel::updateParams)
+                ParameterForm(params = state.params, onChange = viewModel::updateParams, enabled = !state.saving)
             }
         }
     }

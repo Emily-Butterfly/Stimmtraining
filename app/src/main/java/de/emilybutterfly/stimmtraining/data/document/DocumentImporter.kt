@@ -1,5 +1,6 @@
 package de.emilybutterfly.stimmtraining.data.document
 
+import de.emilybutterfly.stimmtraining.data.takeWhole
 import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -52,7 +53,7 @@ object DocumentImporter {
 
     /** Der angezeigte Name: wie die Datei hieß, mit passender Endung. */
     internal fun documentName(displayName: String?, kind: DocumentKind): String {
-        val name = displayName?.replace(Regex("\\p{Cntrl}"), "")?.trim()?.take(200)
+        val name = displayName?.replace(Regex("\\p{Cntrl}"), "")?.trim()?.takeWhole(200)
         if (name.isNullOrBlank()) return "Text.${kind.extension}"
         return if (name.contains('.')) name else "$name.${kind.extension}"
     }

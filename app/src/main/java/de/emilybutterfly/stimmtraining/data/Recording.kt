@@ -95,7 +95,12 @@ data class RecordingParams(
     val notes: String = "",
 ) {
     val warmUpMinutesOrNull: Int?
-        get() = if (warmedUp) warmUpMinutes.trim().toIntOrNull()?.takeIf { it in 0..600 } else null
+        get() = if (warmedUp) warmUpMinutes.trim().toIntOrNull()?.takeIf { it in 0..MAX_WARM_UP_MINUTES } else null
+
+    companion object {
+        /** Längere Aufwärmzeiten gelten als Tippfehler und werden nicht gespeichert. */
+        const val MAX_WARM_UP_MINUTES = 600
+    }
 }
 
 /**

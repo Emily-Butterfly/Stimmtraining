@@ -66,26 +66,57 @@ class FileStore(private val context: Context) {
      * ursprünglichen Namen, damit die andere App ihn anzeigt.
      */
     fun viewIntent(file: File, displayName: String, mimeType: String): Intent {
-        val dir = File(context.cacheDir, "open").apply {
-            deleteRecursively()
-            mkdirs()
-        }
-        if (file.length() > dir.usableSpace - RESERVE_BYTES) {
-            throw IOException("Zu wenig Speicherplatz, um die Datei in einer anderen App zu öffnen.")
-        }
-        val target = File(dir, safeFileName(displayName, file.extension))
-        try {
-            file.copyTo(target, overwrite = true)
-        } catch (e: IOException) {
-            dir.deleteRecursively()
-            throw IOException("Die Datei ließ sich nicht für die andere App vorbereiten.", e)
-        }
+        val target = handoffCopy(OPEN_DIR, file, displayName)
         return Intent(Intent.ACTION_VIEW)
             .setDataAndType(uriFor(target), mimeType)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
+    /**
+     * Eine Kopie von [file] für eine andere App (Öffnen, Teilen), unter [displayName]. Jede Kopie
+     * bekommt einen eigenen Unterordner und damit eine eigene Adresse: Eine App, die eine frühere
+     * Kopie noch liest (z. B. beim Hochladen), verliert sie nicht, und keine bekommt versehentlich
+     * eine andere Datei unter derselben Adresse. Kopien älter als [HANDOFF_KEEP_MS] werden aufgeräumt.
+     */
+    fun handoffCopy(folder: String, file: File, displayName: String): File {
+        val root = File(context.cacheDir, folder)
+        val cutoff = System.currentTimeMillis() - HANDOFF_KEEP_MS
+        root.listFiles()?.forEach { if (it.isFile || it.lastModified() < cutoff) it.deleteRecursively() }
+        if (file.length() > context.cacheDir.usableSpace - RESERVE_BYTES) {
+            throw IOException("Zu wenig Speicherplatz, um die Datei an eine andere App zu geben.")
+        }
+        val dir = File(root, UUID.randomUUID().toString())
+        val target = File(dir, safeFileName(displayName, file.extension))
+        try {
+            if (!dir.mkdirs()) throw IOException("Ordner für die Kopie fehlt.")
+            file.copyTo(target, overwrite = true)
+        } catch (e: IOException) {
+            dir.deleteRecursively()
+            throw IOException("Die Datei ließ sich nicht für die andere App vorbereiten.", e)
+        }
+        return target
+    }
+
     companion object {
+        const val OPEN_DIR = "open"
+        const val SHARE_DIR = "shared"
+
+        /** So lange bleiben Kopien für andere Apps liegen (siehe [handoffCopy]). */
+        const val HANDOFF_KEEP_MS = 24L * 60 * 60 * 1000
+
+        /** Der Dateityp einer Aufnahme für andere Apps, nach der Endung. */
+        fun audioMimeType(extension: String): String = when (extension.lowercase()) {
+            "m4a", "mp4", "aac" -> "audio/mp4"
+            "3gp", "3gpp" -> "audio/3gpp"
+            "ogg", "oga", "opus" -> "audio/ogg"
+            "webm" -> "audio/webm"
+            "mp3" -> "audio/mpeg"
+            "wav" -> "audio/wav"
+            "flac" -> "audio/flac"
+            "amr" -> "audio/amr"
+            else -> "audio/*"
+        }
+
         /** Unter diese Grenze soll der freie Speicher nicht fallen: Datenbank und Android brauchen auch Platz. */
         const val RESERVE_BYTES = 10L * 1024 * 1024
 

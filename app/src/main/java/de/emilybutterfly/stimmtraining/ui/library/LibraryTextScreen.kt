@@ -218,7 +218,15 @@ fun LibraryTextScreen(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                TagEditor(tags = editing.tags, known = knownTags, onAdd = viewModel::addTag, onRemove = viewModel::removeTag)
+                TagEditor(
+                    tags = editing.tags,
+                    known = knownTags,
+                    input = editing.tagInput,
+                    onInputChange = viewModel::updateTagInput,
+                    onAddInput = viewModel::addTagInput,
+                    onAdd = viewModel::addTag,
+                    onRemove = viewModel::removeTag,
+                )
                 Button(
                     onClick = { viewModel.save() },
                     enabled = !editing.saving && !editorState.busy,
@@ -396,12 +404,16 @@ private fun progressDetail(text: LibraryText): String? = when (val position = te
 
 /** Schlagworte hinzufügen (mit Vorschlägen aus schon benutzten) und entfernen. */
 @Composable
-private fun TagEditor(tags: List<String>, known: List<String>, onAdd: (String) -> Unit, onRemove: (String) -> Unit) {
-    var input by rememberSaveable { mutableStateOf("") }
-    val add = {
-        onAdd(input)
-        input = ""
-    }
+private fun TagEditor(
+    tags: List<String>,
+    known: List<String>,
+    input: String,
+    onInputChange: (String) -> Unit,
+    onAddInput: () -> Unit,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    val add = onAddInput
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Schlagworte", style = MaterialTheme.typography.titleSmall)
         if (tags.isNotEmpty()) {
@@ -418,7 +430,7 @@ private fun TagEditor(tags: List<String>, known: List<String>, onAdd: (String) -
         }
         OutlinedTextField(
             value = input,
-            onValueChange = { input = it.take(LibraryText.MAX_TAG_LENGTH) },
+            onValueChange = onInputChange,
             placeholder = { Text("z. B. Gedicht, Zeitung, Dialog") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -437,7 +449,7 @@ private fun TagEditor(tags: List<String>, known: List<String>, onAdd: (String) -
                 suggestions.forEach { suggestion ->
                     AssistChip(onClick = {
                         onAdd(suggestion)
-                        input = ""
+                        onInputChange("")
                     }, label = { Text(suggestion) }, leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp)) })
                 }
             }

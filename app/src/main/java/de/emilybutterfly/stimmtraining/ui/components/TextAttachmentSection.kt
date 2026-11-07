@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -63,11 +64,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +95,7 @@ import de.emilybutterfly.stimmtraining.data.PastedText
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.data.document.DocumentKind
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -145,14 +149,18 @@ fun TextAttachmentSection(
     var awaitingCamera by rememberSaveable { mutableStateOf(false) }
     var sawImport by rememberSaveable { mutableStateOf(false) }
     var lastPageBeforeCamera by rememberSaveable { mutableStateOf<String?>(null) }
+    var pagesBeforeCamera by rememberSaveable { mutableIntStateOf(0) }
     var askNextPage by rememberSaveable { mutableStateOf(false) }
     var showPages by rememberSaveable { mutableStateOf(false) }
     val lastPage = photo?.pages?.lastOrNull()?.path
     // Erst fragen, wenn nichts mehr läuft: Beim Bearbeiten werden gespeicherte Seiten vorher kopiert.
-    LaunchedEffect(busy, lastPage, awaitingCamera) {
+    LaunchedEffect(busy, lastPage, pageCount, awaitingCamera) {
         if (!awaitingCamera) return@LaunchedEffect
+        // Beim Hinzufügen zählt nur eine zusätzliche Seite: Beim Bearbeiten werden die gespeicherten
+        // Seiten vorher kopiert, die letzte Seite hat dann einen neuen Pfad, auch wenn das Foto scheitert.
+        val added = if (addingPage) pageCount > pagesBeforeCamera else lastPage != null && lastPage != lastPageBeforeCamera
         when {
-            !busy && lastPage != null && lastPage != lastPageBeforeCamera -> {
+            !busy && added -> {
                 awaitingCamera = false
                 sawImport = false
                 askNextPage = true
@@ -161,6 +169,11 @@ fun TextAttachmentSection(
             sawImport -> {
                 awaitingCamera = false
                 sawImport = false
+            }
+            else -> {
+                // Gescheitert, bevor „busy“ überhaupt zu sehen war: nicht später bei einer anderen Änderung fragen.
+                delay(CAMERA_RESULT_WAIT_MS)
+                awaitingCamera = false
             }
         }
     }
@@ -171,6 +184,7 @@ fun TextAttachmentSection(
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) {
             lastPageBeforeCamera = lastPage
+            pagesBeforeCamera = pageCount
             sawImport = false
             awaitingCamera = true
             onCameraResult(addingPage)
@@ -192,9 +206,15 @@ fun TextAttachmentSection(
     }
     val openGallery = { addPage: Boolean ->
         addingPage = addPage && photo != null
-        pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        awaitingCamera = false
+        try {
+            pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(context, "Keine App zur Bildauswahl gefunden.", Toast.LENGTH_SHORT).show()
+        }
     }
     val openFile = {
+        awaitingCamera = false
         try {
             pickDocument.launch(DocumentKind.PICKER_MIME_TYPES)
         } catch (_: ActivityNotFoundException) {
@@ -400,17 +420,6 @@ fun TextAttachmentSection(
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     }
 
-    if (askNextPage) {
-        NextPageDialog(
-            pageCount = pageCount,
-            onNextPage = {
-                askNextPage = false
-                openCamera(true)
-            },
-            onDone = { askNextPage = false },
-        )
-    }
-
     if (showPages && photo != null) {
         PageOverviewDialog(
             pages = photo.pages,
@@ -422,6 +431,19 @@ fun TextAttachmentSection(
             onAddCamera = { openCamera(true) }.takeIf { enabled },
             onAddGallery = { openGallery(true) }.takeIf { enabled },
             onDismiss = { showPages = false },
+        )
+    }
+
+    // Nach der Seitenübersicht: Dialoge liegen in der Reihenfolge übereinander, in der sie
+    // entstehen – auch wenn sie nach dem Drehen neu entstehen.
+    if (askNextPage) {
+        NextPageDialog(
+            pageCount = pageCount,
+            onNextPage = {
+                askNextPage = false
+                openCamera(true)
+            },
+            onDone = { askNextPage = false },
         )
     }
 
@@ -602,8 +624,13 @@ private fun PhotoPages(
     val onMark = marks?.onMark
     // Ein anderer Text (oder ein anderer Anfang) beginnt auf seiner ersten Seite, nicht dort, wo der vorige stand.
     key(photo.pages.firstOrNull(), first) {
+        val state = rememberPagerState { pages.size }
+        LaunchedEffect(state) {
+            snapshotFlow { state.currentPage }.collect { ShownPage.remember(photo, first + it) }
+        }
         PhotoPager(
             pages = pages,
+            state = state,
             zoomable = zoomable,
             marks = { page ->
                 marks?.pageMarks(first + page) ?: PageMarks.section(first + page, photo.pages.size, photo.startY, photo.endY)
@@ -623,8 +650,10 @@ private fun PhotoPages(
 fun PhotoViewer(photo: TextAttachment.Photo, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
+            val state = rememberPagerState(initialPage = ShownPage.of(photo)) { photo.pages.size }
             PhotoPager(
                 pages = photo.pages,
+                state = state,
                 onDark = true,
                 marks = { page -> PageMarks.section(page, photo.pages.size, photo.startY, photo.endY) },
                 modifier = Modifier.fillMaxSize().safeDrawingPadding(),
@@ -638,3 +667,23 @@ fun PhotoViewer(photo: TextAttachment.Photo, onDismiss: () -> Unit) {
         }
     }
 }
+
+/**
+ * Die Seite, die in der Vorschau zuletzt zu sehen war: Das Vollbild öffnet dort statt auf Seite 1.
+ * Nur für das zuletzt gezeigte Foto und nur im Speicher – eine Bequemlichkeit, kein Zustand.
+ */
+private object ShownPage {
+    private var photo: String? = null
+    private var page = 0
+
+    fun remember(shown: TextAttachment.Photo, index: Int) {
+        photo = shown.pages.firstOrNull()?.path
+        page = index
+    }
+
+    fun of(shown: TextAttachment.Photo): Int =
+        if (shown.pages.firstOrNull()?.path == photo) page.coerceIn(0, (shown.pages.size - 1).coerceAtLeast(0)) else 0
+}
+
+/** So lange wartet die Frage „noch eine Seite?“ auf die Übernahme eines Kamerafotos. */
+private const val CAMERA_RESULT_WAIT_MS = 2_000L

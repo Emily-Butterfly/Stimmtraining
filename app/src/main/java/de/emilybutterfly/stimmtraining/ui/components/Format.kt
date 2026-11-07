@@ -19,8 +19,11 @@ fun formatTime(epochMillis: Long): String = timeFormat.format(epochMillis.toLoca
 
 fun localDate(epochMillis: Long): LocalDate = epochMillis.toLocal().toLocalDate()
 
-fun formatDay(date: LocalDate): String {
-    val today = LocalDate.now()
+/** „1 Aufnahme“, „3 Aufnahmen“. */
+fun recordingCount(count: Int): String = if (count == 1) "1 Aufnahme" else "$count Aufnahmen"
+
+/** [today] von außen, damit „Heute“ nach Mitternacht nicht stehen bleibt (siehe rememberToday). */
+fun formatDay(date: LocalDate, today: LocalDate = LocalDate.now()): String {
     return when (date) {
         today -> "Heute"
         today.minusDays(1) -> "Gestern"

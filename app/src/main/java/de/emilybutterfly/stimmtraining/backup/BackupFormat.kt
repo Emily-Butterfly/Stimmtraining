@@ -1,5 +1,6 @@
 package de.emilybutterfly.stimmtraining.backup
 
+import de.emilybutterfly.stimmtraining.data.takeWhole
 import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import de.emilybutterfly.stimmtraining.data.document.DocumentKind
@@ -157,7 +158,7 @@ object BackupFormat {
         val fraction = o.doubleOrNull("progressFraction")?.toFloat()?.takeIf { it in 0f..1f }
         val progress = o.optJSONObject("progress")?.takeIf { base.finishedAt == null }?.let { p ->
             val offset = p.intOrNull("offset")
-            val anchor = p.stringOrNull("anchor")?.take(MAX_ANCHOR)
+            val anchor = p.stringOrNull("anchor")?.takeWhole(MAX_ANCHOR)
             val page = p.intOrNull("page")
             val y = p.doubleOrNull("y")?.toFloat()
             when {
@@ -285,7 +286,7 @@ object BackupFormat {
 
     /** Der Name wird nur angezeigt, nie als Pfad benutzt; trotzdem ohne Steuerzeichen und kurz. */
     private fun cleanDisplayName(raw: String): String? =
-        raw.replace(Regex("\\p{Cntrl}"), "").trim().take(200).ifBlank { null }
+        raw.replace(Regex("\\p{Cntrl}"), "").trim().takeWhole(200).ifBlank { null }
 
     /** Nur echte Zeichenketten: optString würde Listen und Objekte in Text umwandeln, verschachtelt sogar rekursiv. */
     private fun JSONObject.stringOrNull(name: String): String? = opt(name) as? String

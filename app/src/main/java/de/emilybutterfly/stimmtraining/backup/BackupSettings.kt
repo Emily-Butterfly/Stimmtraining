@@ -8,6 +8,7 @@ import androidx.core.net.toUri
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import java.util.UUID
 
 enum class AutoBackupInterval(val days: Long, val label: String) {
     OFF(0, "Aus"),
@@ -58,6 +59,14 @@ class BackupSettings(context: Context) {
     /** Stand der Daten bei der letzten erfolgreichen Sicherung. */
     val lastFingerprint: String? get() = prefs.getString(KEY_FINGERPRINT, null)
 
+    /**
+     * Kennung dieser Installation für die Namen automatischer Sicherungen: Nutzen zwei Geräte
+     * denselben Ordner, räumt jedes nur seine eigenen Sicherungen auf.
+     */
+    val installId: String
+        get() = prefs.getString(KEY_INSTALL_ID, null)?.takeIf { AutoBackup.INSTALL_ID.matches(it) }
+            ?: UUID.randomUUID().toString().replace("-", "").take(8).also { id -> prefs.edit { putString(KEY_INSTALL_ID, id) } }
+
     fun recordSuccess(at: Long, count: Int, fingerprint: String) = prefs.edit {
         putLong(KEY_LAST_SUCCESS, at)
         putInt(KEY_LAST_COUNT, count)
@@ -75,6 +84,7 @@ class BackupSettings(context: Context) {
         const val KEY_FOLDER = "folder"
         const val KEY_INTERVAL = "interval"
         const val KEY_FINGERPRINT = "fingerprint"
+        const val KEY_INSTALL_ID = "install_id"
         const val KEY_LAST_SUCCESS = "last_success"
         const val KEY_LAST_COUNT = "last_count"
         const val KEY_LAST_ERROR = "last_error"

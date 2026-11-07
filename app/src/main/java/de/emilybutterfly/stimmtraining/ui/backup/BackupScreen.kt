@@ -1,5 +1,15 @@
 package de.emilybutterfly.stimmtraining.ui.backup
 
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import androidx.compose.material3.RadioButton
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import android.content.ActivityNotFoundException
+import de.emilybutterfly.stimmtraining.ui.components.recordingCount
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -29,9 +39,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -40,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,6 +78,15 @@ fun BackupScreen(
     val folderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) viewModel.chooseFolder(uri)
     }
+    val context = LocalContext.current
+    // Ohne Dateiauswahl (z. B. abgeschaltet oder eingeschränkt) eine Meldung statt eines Absturzes.
+    val launchSafely = { launch: () -> Unit ->
+        try {
+            launch()
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(context, "Keine App zur Dateiauswahl gefunden.", Toast.LENGTH_LONG).show()
+        }
+    }
 
     LaunchedEffect(ui.message) {
         ui.message?.let {
@@ -81,7 +98,7 @@ fun BackupScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Backup") },
+                title = { Text("Backup", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
@@ -101,7 +118,7 @@ fun BackupScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "${ui.recordingCount} Aufnahmen · ${formatBytes(ui.totalBytes)}",
+                "${recordingCount(ui.recordingCount)} · ${formatBytes(ui.totalBytes)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -122,7 +139,7 @@ fun BackupScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Button(
-                        onClick = { exportLauncher.launch("Stimmtraining-Backup-${LocalDate.now()}.zip") },
+                        onClick = { launchSafely { exportLauncher.launch("Stimmtraining-Backup-${LocalDate.now()}.zip") } },
                         enabled = ui.busyLabel == null,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -132,7 +149,9 @@ fun BackupScreen(
                     }
                     OutlinedButton(
                         onClick = {
-                            importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                            launchSafely {
+                                importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                            }
                         },
                         enabled = ui.busyLabel == null,
                         modifier = Modifier.fillMaxWidth(),
@@ -167,20 +186,35 @@ fun BackupScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    FilledTonalButton(onClick = { folderLauncher.launch(null) }, modifier = Modifier.fillMaxWidth()) {
+                    FilledTonalButton(onClick = { launchSafely { folderLauncher.launch(null) } }, modifier = Modifier.fillMaxWidth()) {
                         Text(if (auto.folderUri == null) "Ordner wählen" else "Anderen Ordner wählen")
                     }
 
                     Text("Häufigkeit", style = MaterialTheme.typography.titleSmall)
-                    val intervals = AutoBackupInterval.entries
-                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                        intervals.forEachIndexed { index, interval ->
-                            SegmentedButton(
-                                selected = auto.interval == interval,
-                                onClick = { viewModel.setInterval(interval) },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = intervals.size),
-                                enabled = auto.folderUri != null || interval == AutoBackupInterval.OFF,
-                            ) { Text(interval.label) }
+                    // Zeilen statt nebeneinander: „Wöchentlich“ bricht sonst auf schmalen Handys mitten im Wort um.
+                    Column(Modifier.selectableGroup()) {
+                        AutoBackupInterval.entries.forEach { interval ->
+                            val enabled = auto.folderUri != null || interval == AutoBackupInterval.OFF
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .selectable(
+                                        selected = auto.interval == interval,
+                                        enabled = enabled,
+                                        role = Role.RadioButton,
+                                        onClick = { viewModel.setInterval(interval) },
+                                    ),
+                            ) {
+                                RadioButton(selected = auto.interval == interval, onClick = null, enabled = enabled)
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    interval.label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                                )
+                            }
                         }
                     }
 
@@ -196,7 +230,7 @@ fun BackupScreen(
 
                     auto.lastSuccessAt?.let {
                         Text(
-                            "Letzte Sicherung: ${formatDateTime(it)} (${auto.lastCount} Aufnahmen)",
+                            "Letzte Sicherung: ${formatDateTime(it)} (${recordingCount(auto.lastCount)})",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }

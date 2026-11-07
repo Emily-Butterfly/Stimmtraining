@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import de.emilybutterfly.stimmtraining.data.AttachmentChange
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.TextAttachment
+import de.emilybutterfly.stimmtraining.data.takeWhole
 import de.emilybutterfly.stimmtraining.data.document.DocumentKind
 import de.emilybutterfly.stimmtraining.data.document.DocumentText
 import de.emilybutterfly.stimmtraining.data.document.PdfPages
@@ -279,8 +280,10 @@ class LibraryRepository(
     /**
      * Der in einer Aufnahme gelesene Abschnitt als Entwurf, wie weit der Text danach gelesen ist
      * (0..1) und ob er damit zu Ende gelesen ist (auch wenn die letzte Stelle angetippt wurde).
+     * [end]: Bis hierher wurde gelesen, wenn das nicht das Ende ist, aber auch keine Stelle
+     * angetippt wurde – „Bis zum Ende“ bei einem gekürzten Text endet am angezeigten Ende.
      */
-    data class Section(val attachment: TextAttachment?, val fraction: Float?, val finished: Boolean)
+    data class Section(val attachment: TextAttachment?, val fraction: Float?, val finished: Boolean, val end: ReadingPosition? = null)
 
     /**
      * Schneidet aus [text] heraus, was von [start] (null: Anfang) bis [end] (null: Ende) gelesen
@@ -377,20 +380,35 @@ class LibraryRepository(
         if (start == null && end == null) {
             val copy = files.newDraftFile(document.kind.extension).also { created += it }
             document.file.copyTo(copy, overwrite = true)
-            return Section(TextAttachment.Document(copy, document.name), null, finished = true)
+            // Bei einem gekürzten Text ist das angezeigte Ende nicht das Ende des Texts (siehe SHORTENED).
+            val shown = runCatching { DocumentText.read(document.file, document.kind) }.getOrNull()?.takeIf { it.truncated }
+                ?: return Section(TextAttachment.Document(copy, document.name), null, finished = true)
+            val layout = TextLayout(shown)
+            val shownEnd = endOf(layout)
+            return Section(TextAttachment.Document(copy, document.name), shownEnd?.let { TextProgress.fraction(layout, it.offset) }, finished = false, end = shownEnd)
         }
         val content = DocumentText.read(document.file, document.kind)
         val layout = TextLayout(content)
         val from = TextProgress.remainingStart(layout, start?.offset ?: 0)
         val to = (end?.offset ?: layout.length).coerceIn(from, layout.length)
         val section = TextProgress.section(content, from, to)
-        val fraction = end?.let { TextProgress.fraction(layout, to) }
         // Bei einem gekürzten Text ist das angezeigte Ende nicht das Ende des Texts.
         val finished = TextProgress.isAtEnd(layout, to) && !content.truncated
-        if (section.isBlank()) return Section(null, fraction, finished)
+        val stoppedAt = if (finished) null else end ?: endOf(layout)
+        val fraction = stoppedAt?.let { TextProgress.fraction(layout, it.offset) }
+        if (section.isBlank()) return Section(null, fraction, finished, stoppedAt)
         val draft = files.newDraftFile(DocumentKind.Markdown.extension).also { created += it }
         draft.writeText(MarkdownWriter.write(section))
-        return Section(TextAttachment.Document(draft, "${text.title} (Abschnitt)"), fraction, finished)
+        return Section(TextAttachment.Document(draft, "${text.title} (Abschnitt)"), fraction, finished, stoppedAt)
+    }
+
+    /** Die Stelle nach dem letzten angezeigten Satz. */
+    private fun endOf(layout: TextLayout): ReadingPosition.InText? {
+        val text = layout.plainText
+        var offset = text.length - 1
+        while (offset > 0 && text[offset].isWhitespace()) offset--
+        if (offset < 0) return null
+        return layout.sentenceAt(offset)?.let { TextProgress.after(layout, it) }
     }
 
     /** Ein Titel für einen neuen Text: der Dateiname ohne Endung bzw. die erste Zeile eines eingefügten Texts. */
@@ -517,7 +535,7 @@ class LibraryRepository(
          * Zeile steht wegen des Seitenrands selten ganz unten.
          */
         const val LAST_LINES = 0.85f
-        private const val MAX_TITLE = 120
+        const val MAX_TITLE = 120
 
         /** Hinweis, wenn ein Text länger ist, als die App anzeigt (siehe [isShortened]). */
         const val SHORTENED =
@@ -547,6 +565,6 @@ class LibraryRepository(
             .trim()
 
         fun cleanTitle(title: String): String =
-            title.replace(Regex("\\s+"), " ").trim().take(MAX_TITLE).ifBlank { "Ohne Titel" }
+            title.replace(Regex("\\s+"), " ").trim().takeWhole(MAX_TITLE).trim().ifBlank { "Ohne Titel" }
     }
 }

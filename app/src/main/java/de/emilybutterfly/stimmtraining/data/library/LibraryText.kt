@@ -5,6 +5,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import de.emilybutterfly.stimmtraining.data.pageNames
+import de.emilybutterfly.stimmtraining.data.takeWhole
 
 /**
  * Ein Text in der Bibliothek: Fotos oder eine Datei, die man über mehrere Aufnahmen hinweg liest.
@@ -67,10 +68,18 @@ data class LibraryText(
     companion object {
         /** Bereinigt eingegebene Schlagworte: ohne Leerraum am Rand, ohne Doppelte (Groß-/Kleinschreibung egal). */
         fun joinTags(tags: List<String>): String =
-            tags.map { it.replace(Regex("\\s+"), " ").trim().take(MAX_TAG_LENGTH) }
-                .filter { it.isNotEmpty() }
+            tags.flatMap(::splitTags)
                 .distinctBy { it.lowercase() }
                 .joinToString("\n")
+
+        /**
+         * Ein eingegebenes Schlagwort, bereinigt; „Gedicht, Lyrik; Rilke“ ergibt drei. Zu lange
+         * werden gekürzt, ohne ein Emoji zu halbieren.
+         */
+        fun splitTags(input: String): List<String> =
+            input.split(',', ';', '\n')
+                .map { it.replace(Regex("\\s+"), " ").trim().takeWhole(MAX_TAG_LENGTH).trim() }
+                .filter { it.isNotEmpty() }
 
         const val MAX_TAG_LENGTH = 40
     }

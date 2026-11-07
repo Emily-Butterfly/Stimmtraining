@@ -91,7 +91,7 @@ fun PitchHistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Tonhöhen-Verlauf") },
+                title = { Text("Tonhöhen-Verlauf", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")

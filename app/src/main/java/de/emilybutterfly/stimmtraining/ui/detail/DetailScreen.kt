@@ -107,7 +107,14 @@ fun DetailScreen(
         if (load is DetailLoad.Missing) currentOnClose()
     }
 
-    BackHandler(enabled = edit != null) { if (edit?.saving != true) viewModel.cancelEdit() }
+    // Mit ungespeicherten Änderungen erst nachfragen: Ein versehentliches Wischen vom Rand genügt sonst.
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
+    val cancelEdit = {
+        if (edit?.saving != true) {
+            if (viewModel.hasChanges()) confirmDiscard = true else viewModel.cancelEdit()
+        }
+    }
+    BackHandler(enabled = edit != null) { cancelEdit() }
 
     val recording = (load as? DetailLoad.Ready)?.recording
     val editing = edit
@@ -124,7 +131,7 @@ fun DetailScreen(
                 },
                 navigationIcon = {
                     if (editing != null) {
-                        IconButton(onClick = viewModel::cancelEdit, enabled = !editing.saving) {
+                        IconButton(onClick = cancelEdit, enabled = !editing.saving) {
                             Icon(Icons.Filled.Close, contentDescription = "Abbrechen")
                         }
                     } else {
@@ -174,7 +181,7 @@ fun DetailScreen(
             ) {
                 if (editing != null) {
                     Text(
-                        "Aufgenommen ${formatDateTime(recording.recordedAt)}",
+                        "Aufgenommen am ${formatDateTime(recording.recordedAt)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -195,7 +202,7 @@ fun DetailScreen(
                         onOpenExternally = openExternally,
                         enabled = !editing.saving,
                     )
-                    ParameterForm(params = editing.params, onChange = viewModel::updateParams)
+                    ParameterForm(params = editing.params, onChange = viewModel::updateParams, enabled = !editing.saving)
                     Button(
                         onClick = viewModel::saveEdit,
                         enabled = !editing.saving && !editing.attachmentBusy,
@@ -221,6 +228,21 @@ fun DetailScreen(
 
     val shown = recording?.let { if (editing != null) viewModel.editedAttachment(it, editing) else viewModel.attachment(it) }
     if (viewing && shown != null) AttachmentViewer(shown, reader, onDismiss = { viewing = false })
+
+    if (confirmDiscard && editing != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Änderungen verwerfen?") },
+            text = { Text("Was du an dieser Aufnahme geändert hast, wird nicht gespeichert.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscard = false
+                    viewModel.cancelEdit()
+                }) { Text("Verwerfen") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Weiter bearbeiten") } },
+        )
+    }
 
     if (confirmDelete) {
         AlertDialog(
