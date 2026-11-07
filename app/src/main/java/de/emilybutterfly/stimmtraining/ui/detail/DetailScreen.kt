@@ -83,6 +83,7 @@ fun DetailScreen(
     val edit by viewModel.edit.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val pitchProgress by viewModel.pitchProgress.collectAsStateWithLifecycle()
+    val addingToLibrary by viewModel.addingToLibrary.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
@@ -98,7 +99,8 @@ fun DetailScreen(
             viewModel.messageShown()
         }
     }
-    BackHandler(enabled = edit != null) { viewModel.cancelEdit() }
+    // Während des Speichern nicht abbrechen: Die Entwürfe werden gerade übernommen.
+    BackHandler(enabled = edit != null) { if (edit?.saving != true) viewModel.cancelEdit() }
 
     val recording = (load as? DetailLoad.Ready)?.recording
     val editing = edit
@@ -115,7 +117,7 @@ fun DetailScreen(
                 },
                 navigationIcon = {
                     if (editing != null) {
-                        IconButton(onClick = viewModel::cancelEdit) {
+                        IconButton(onClick = viewModel::cancelEdit, enabled = !editing.saving) {
                             Icon(Icons.Filled.Close, contentDescription = "Abbrechen")
                         }
                     } else {
@@ -184,6 +186,7 @@ fun DetailScreen(
                         onRemove = viewModel::removeAttachment,
                         onExpand = { viewing = true },
                         onOpenExternally = openExternally,
+                        enabled = !editing.saving,
                     )
                     ParameterForm(params = editing.params, onChange = viewModel::updateParams)
                     Button(
@@ -202,6 +205,7 @@ fun DetailScreen(
                         onExpand = { viewing = true },
                         onOpenExternally = openExternally,
                         onAddToLibrary = viewModel::addToLibrary,
+                        addingToLibrary = addingToLibrary,
                     )
                 }
             }
@@ -238,6 +242,7 @@ private fun RecordingDetails(
     onExpand: () -> Unit,
     onOpenExternally: (TextAttachment.Document) -> Unit,
     onAddToLibrary: () -> Unit,
+    addingToLibrary: Boolean,
 ) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -261,7 +266,7 @@ private fun RecordingDetails(
     if (attachment != null) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             AttachmentPreview(attachment, reader, onExpand = onExpand, onOpenExternally = onOpenExternally)
-            TextButton(onClick = onAddToLibrary) {
+            TextButton(onClick = onAddToLibrary, enabled = !addingToLibrary) {
                 Icon(Icons.Outlined.LibraryAdd, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("In Bibliothek übernehmen")

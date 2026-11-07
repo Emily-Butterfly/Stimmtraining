@@ -58,6 +58,20 @@ data class Recording(
     /** Die Fotoseiten in Lesereihenfolge. */
     val photoPages: List<String> get() = photoFile.pageNames()
 
+    companion object {
+        /**
+         * Höchstlängen der Textfelder. Eine Datenbankzeile muss in Androids Lesefenster (2 MB)
+         * passen; sonst ließe sich keine Aufnahme mehr anzeigen – auch nicht nach einem Backup.
+         */
+        const val MAX_TITLE = 200
+        const val MAX_EXERCISE = 200
+        const val MAX_NOTES = 20_000
+
+        /** Ohne Steuerzeichen (Zeilenumbrüche und Tabs bleiben), gekürzt auf [max] Zeichen. */
+        fun cleanText(raw: String, max: Int): String =
+            raw.replace(Regex("[\\p{Cntrl}&&[^\\n\\t]]"), "").trim().takeWhole(max)
+    }
+
     fun params() = RecordingParams(
         title = title,
         exercise = exercise,

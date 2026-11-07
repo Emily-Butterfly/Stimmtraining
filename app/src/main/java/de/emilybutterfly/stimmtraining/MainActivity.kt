@@ -39,7 +39,10 @@ class MainActivity : ComponentActivity() {
             // Nur bei einem frischen Start: Dann kann kein wiederhergestellter Entwurf mehr
             // auf diese Dateien zeigen (nach dem Beenden durch Android schon).
             val container = (application as StimmtrainingApp).container
-            container.appScope.launch(Dispatchers.IO) { container.files.cleanOldDrafts() }
+            container.appScope.launch(Dispatchers.IO) {
+                container.files.cleanOldDrafts()
+                runCatching { container.library.cleanOrphans() }
+            }
         }
         enableEdgeToEdge()
         val settings = (application as StimmtrainingApp).container.settings

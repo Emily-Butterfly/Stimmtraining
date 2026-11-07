@@ -65,6 +65,8 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
@@ -305,9 +307,17 @@ private fun BlockText(block: TextBlock, size: Float, text: AnnotatedString? = nu
     val tappable = if (onTap == null) {
         Modifier
     } else {
-        Modifier.pointerInput(Unit) {
-            detectTapGestures { position -> layout?.let { currentOnTap?.invoke(it.getOffsetForPosition(position)) } }
-        }
+        Modifier
+            .pointerInput(Unit) {
+                detectTapGestures { position -> layout?.let { currentOnTap?.invoke(it.getOffsetForPosition(position)) } }
+            }
+            // Ohne Antippen eines bestimmten Satzes, z. B. mit TalkBack: bis zum Ende des Absatzes gelesen.
+            .semantics {
+                onClick(label = "Bis zum Ende dieses Absatzes gelesen") {
+                    currentOnTap?.invoke((shown.length - 1).coerceAtLeast(0))
+                    true
+                }
+            }
     }
     when (block.style) {
         BlockStyle.ListItem -> Row(Modifier.padding(start = indent)) {
@@ -377,7 +387,7 @@ private fun PdfView(
                     index = index,
                     renderPx = renderPx,
                     marks = marks?.pageMarks(index),
-                    onTapY = marks?.onMark?.let { onMark -> { y: Float -> marks.tapPage(index, y, null)?.let(onMark) } },
+                    onTapY = marks?.onMark?.let { { y: Float -> marks.tapPage(index, pages.pageCount, y, null) } },
                     modifier = Modifier.fillMaxWidth().aspectRatio(size.width.toFloat() / size.height),
                 )
             }
@@ -411,9 +421,16 @@ private fun PdfPage(
                 if (onTapY == null) {
                     Modifier
                 } else {
-                    Modifier.pointerInput(Unit) {
-                        detectTapGestures { tap -> currentOnTapY?.invoke((tap.y / size.height).coerceIn(0f, 1f)) }
-                    }
+                    Modifier
+                        .pointerInput(Unit) {
+                            detectTapGestures { tap -> currentOnTapY?.invoke((tap.y / size.height).coerceIn(0f, 1f)) }
+                        }
+                        .semantics {
+                            onClick(label = "Bis zum Ende dieser Seite gelesen") {
+                                currentOnTapY?.invoke(1f)
+                                true
+                            }
+                        }
                 },
             )
             .drawWithContent {

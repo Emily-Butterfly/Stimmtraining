@@ -67,9 +67,9 @@ class AttachmentEditor(
         if (uris.isEmpty()) return
         val limited = uris.take(TextAttachment.MAX_PAGES)
         if (addPage) {
-            addPages { files.importDraftPhotos(app, limited) }
+            addPages { files.importDraftPhotos(app, limited) { onMessage(skippedPhotosMessage(it)) } }
         } else {
-            replace(isPhoto = true) { DraftPages.append(null, files.importDraftPhotos(app, limited)).first }
+            replace(isPhoto = true) { DraftPages.append(null, files.importDraftPhotos(app, limited) { onMessage(skippedPhotosMessage(it)) }).first }
         }
         if (uris.size > limited.size) onMessage(TOO_MANY_PAGES)
     }
@@ -109,9 +109,18 @@ class AttachmentEditor(
         set(State())
     }
 
-    /** Nach dem Speichern: Die Entwürfe gehören jetzt dem Gespeicherten. */
-    fun committed() {
+    /**
+     * Nach dem Speichern von [saved]: Dessen Entwürfe gehören jetzt dem Gespeicherten. Kam
+     * währenddessen doch noch etwas Neues dazu, wird es verworfen, statt liegen zu bleiben.
+     */
+    fun committed(saved: State) {
         job?.cancel()
+        val current = _state.value
+        if (current.change != saved.change) {
+            (current.change as? AttachmentChange.Replace)?.attachment?.files
+                ?.filter { file -> (saved.change as? AttachmentChange.Replace)?.attachment?.files?.contains(file) != true }
+                ?.forEach { it.delete() }
+        }
         set(State())
     }
 
@@ -124,8 +133,9 @@ class AttachmentEditor(
     }
 
     private fun addPages(load: suspend () -> List<File>) = launch(isPhoto = true, failure = ::importMessage) {
-        val added = load()
+        // Erst die gespeicherten Seiten kopieren, dann importieren: Scheitert das Kopieren, ist noch kein neues Foto verloren.
         val (photo, origins) = editablePhoto()
+        val added = load()
         if (photo == null) discardDrafts()
         val (result, dropped) = DraftPages.append(photo, added)
         if (dropped > 0) onMessage(TOO_MANY_PAGES)

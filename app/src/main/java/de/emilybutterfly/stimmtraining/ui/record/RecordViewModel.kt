@@ -31,6 +31,7 @@ import de.emilybutterfly.stimmtraining.ui.importDraftPhotos
 import de.emilybutterfly.stimmtraining.ui.importFailureMessage
 import de.emilybutterfly.stimmtraining.ui.openWithChooser
 import de.emilybutterfly.stimmtraining.ui.pageFailureMessage
+import de.emilybutterfly.stimmtraining.ui.skippedPhotosMessage
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
 import kotlinx.coroutines.CancellationException
@@ -49,6 +50,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import kotlin.math.max
 
 enum class RecorderPhase { Idle, Recording, Paused, Done }
@@ -365,10 +367,19 @@ class RecordViewModel(
             _state.update { it.copy(attachmentBusy = true) }
             try {
                 val title = container.library.suggestedTitle(attachment, LibraryRepository.photoTitle(attachment))
+                val shortened = container.library.isShortened(attachment)
                 val id = withContext(NonCancellable) { container.library.add(attachment, title, move = true) }
                 _state.update { it.copy(attachment = null) }
                 loadLibraryText(id, end = null) {}
-                _state.update { it.copy(message = "In die Bibliothek gelegt. Tippe nach dem Lesen auf die Stelle, bis zu der du gekommen bist.") }
+                _state.update {
+                    it.copy(
+                        message = if (shortened) {
+                            LibraryRepository.SHORTENED
+                        } else {
+                            "In die Bibliothek gelegt. Tippe nach dem Lesen auf die Stelle, bis zu der du gekommen bist."
+                        },
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -396,12 +407,14 @@ class RecordViewModel(
         // Mehr als in einen Anhang passt, wird gar nicht erst übernommen.
         val limited = uris.take(TextAttachment.MAX_PAGES)
         if (addPage) {
-            addPages { container.files.importDraftPhotos(app, limited) }
+            addPages { container.files.importDraftPhotos(app, limited, ::reportSkipped) }
         } else {
-            importAttachment(isPhoto = true) { DraftPages.append(null, container.files.importDraftPhotos(app, limited)).first }
+            importAttachment(isPhoto = true) { DraftPages.append(null, container.files.importDraftPhotos(app, limited, ::reportSkipped)).first }
         }
         if (uris.size > limited.size) _state.update { it.copy(message = TOO_MANY_PAGES) }
     }
+
+    private fun reportSkipped(count: Int) = _state.update { it.copy(message = skippedPhotosMessage(count)) }
 
     private fun addPages(load: suspend () -> List<File>) {
         importJob = viewModelScope.launch {
@@ -672,6 +685,8 @@ class RecordViewModel(
                 level = 0f,
                 pitch = null,
                 pitchProgress = null,
+                // Eine neue Aufnahme fragt wieder von vorne: „Bis zum Ende“ ist vorausgewählt.
+                library = it.library?.copy(end = null),
             )
         }
     }
@@ -703,9 +718,17 @@ class RecordViewModel(
                 }
                 val reading = now.library
                 val id = withContext(NonCancellable) {
-                    // Aus der Bibliothek kommt nur der gelesene Abschnitt an die Aufnahme.
+                    // Aus der Bibliothek kommt nur der gelesene Abschnitt an die Aufnahme. Geht das nicht,
+                    // wird nicht gespeichert: Sonst wären Text und Fortschritt stillschweigend weg.
                     val section = reading?.let { r ->
-                        container.library.get(r.textId)?.let { text -> runCatching { container.library.section(text, r.start, r.end) }.getOrNull() }
+                        val text = container.library.get(r.textId) ?: throw IOException(SECTION_GONE)
+                        try {
+                            container.library.section(text, r.start, r.end)
+                        } catch (e: Exception) {
+                            throw IOException(SECTION_FAILED, e)
+                        } catch (e: OutOfMemoryError) {
+                            throw IOException(SECTION_FAILED, e)
+                        }
                     }
                     val draft = if (reading != null) section?.attachment else now.attachment
                     val id = try {
@@ -799,6 +822,10 @@ class RecordViewModel(
         internal const val KEY_PITCH_LOW = "pitchLow"
         internal const val KEY_PITCH_HIGH = "pitchHigh"
 
+        private const val SECTION_GONE =
+            "Diesen Text gibt es nicht mehr in der Bibliothek. Entferne ihn oben, dann lässt sich die Aufnahme ohne Text speichern."
+        private const val SECTION_FAILED =
+            "Der gelesene Abschnitt ließ sich nicht übernehmen. Versuche es noch einmal oder entferne den Text, um ohne ihn zu speichern."
         private const val POSITION_LOST = "Die Stelle, bis zu der du gelesen hattest, war nicht mehr zu finden – der Text beginnt von vorne."
         private const val TOO_MANY_PAGES = "Mehr als ${TextAttachment.MAX_PAGES} Seiten passen nicht – die übrigen wurden nicht übernommen."
 

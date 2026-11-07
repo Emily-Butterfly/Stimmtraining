@@ -165,10 +165,12 @@ class LibraryTextViewModel(
                         _message.value = "Füge zuerst den Text hinzu: Foto, Datei oder eingefügt."
                         return@launch
                     }
+                    val shortened = repository.isShortened(attachment)
                     val newId = withContext(NonCancellable) {
                         repository.add(attachment, edit.title.ifBlank { repository.suggestedTitle(attachment, photoTitle(attachment)) }, edit.tags, move = true)
                     }
-                    editor.committed()
+                    if (shortened) _message.value = LibraryRepository.SHORTENED
+                    editor.committed(state)
                     _edit.value = null
                     onCreated(newId)
                 } else {
@@ -180,7 +182,7 @@ class LibraryTextViewModel(
                     val lost = withContext(NonCancellable) {
                         repository.update(id, edit.title, edit.tags, state.change, state.origins)
                     }
-                    editor.committed()
+                    editor.committed(state)
                     _edit.value = null
                     if (lost) _message.value = "Die Stelle, bis zu der du gelesen hattest, gibt es nicht mehr – der Text beginnt wieder von vorne."
                 }

@@ -6,11 +6,13 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import de.emilybutterfly.stimmtraining.BuildConfig
 import de.emilybutterfly.stimmtraining.data.FileStore
+import de.emilybutterfly.stimmtraining.data.Recording
 import de.emilybutterfly.stimmtraining.data.RecordingDao
 import de.emilybutterfly.stimmtraining.data.RecordingRepository
 import de.emilybutterfly.stimmtraining.data.joinPageNames
 import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
@@ -90,79 +92,132 @@ class BackupManager(
      * Vorhandene Aufnahmen werden nie überschrieben oder gelöscht.
      */
     suspend fun import(input: InputStream): ImportResult = withContext(Dispatchers.IO) {
-        val staging = File(context.cacheDir, "import-${System.currentTimeMillis()}")
-        staging.mkdirs()
+        // Nicht im Cache: Android darf ihn leeren, während noch eingelesen wird.
+        val staging = files.importStagingDir.apply {
+            deleteRecursively()
+            mkdirs()
+        }
         try {
             var manifest: String? = null
+            // Mehr als der freie Speicher (abzüglich der Reserve) wird nie ausgepackt, auch nicht bei einer „ZIP-Bombe“.
+            var budget = files.freeBytes() - FileStore.RESERVE_BYTES
+            var entries = 0
             val zip = ZipInputStream(BufferedInputStream(input))
             while (true) {
                 val entry = zip.nextEntry ?: break
+                if (++entries > MAX_ENTRIES) throw BackupException("Die Sicherung enthält ungewöhnlich viele Dateien und wird nicht eingelesen.")
                 val name = BackupFormat.safeEntryName(entry.name)
                 if (!entry.isDirectory && name != null) {
                     if (name == BackupFormat.MANIFEST) {
-                        manifest = zip.readBytes().toString(Charsets.UTF_8)
+                        manifest = readLimited(zip, MAX_MANIFEST_BYTES)?.toString(Charsets.UTF_8)
+                            ?: throw BackupException("Die Sicherung ist beschädigt (manifest.json ist zu groß).")
                     } else {
                         val target = File(staging, name)
                         target.parentFile?.mkdirs()
-                        target.outputStream().use { zip.copyTo(it) }
+                        budget -= copyLimited(zip, target, budget)
                     }
                 }
                 zip.closeEntry()
             }
 
             val json = manifest ?: throw BackupException("Diese Datei ist keine Stimmtraining-Sicherung (manifest.json fehlt).")
-            val entries = BackupFormat.parse(json)
+            val recordings = BackupFormat.parse(json)
             val libraryEntries = BackupFormat.parseLibrary(json)
             val known = dao.allUuids().toMutableSet()
             var imported = 0
             var skipped = 0
             var incomplete = 0
-            for (entry in entries) {
+            for (entry in recordings) {
                 val recording = entry.recording
                 if (!known.add(recording.uuid)) {
                     skipped++
                     continue
                 }
-                val audio = File(staging, BackupFormat.AUDIO_DIR + recording.audioFile)
-                if (!audio.isFile) {
-                    incomplete++
-                    continue
-                }
-                val extension = audio.extension.lowercase().takeIf { it in AUDIO_EXTENSIONS } ?: "m4a"
-                val audioName = "${recording.uuid}.$extension"
-                FileStore.move(audio, files.audio(audioName))
-                val photos = recording.photoPages
-                    .map { File(staging, BackupFormat.PHOTO_DIR + it) }
-                    .filter { it.isFile }
-                val photoNames = photos.mapIndexed { page, source ->
-                    RecordingRepository.newPhotoName(recording.uuid, page).also { FileStore.move(source, files.photo(it)) }
-                }
-                // Fehlt eine Seite, passen die Abschnittslinien nicht mehr sicher.
-                val complete = photoNames.size == recording.photoPages.size
-                val document = recording.documentFile
-                    ?.let { File(staging, BackupFormat.DOCUMENT_DIR + it) }
-                    ?.takeIf { it.isFile }
-                val documentName = document?.let { source ->
-                    RecordingRepository.newDocumentName(recording.uuid, source.extension.lowercase())
-                        .also { FileStore.move(source, files.document(it)) }
-                }
-                dao.insert(
-                    recording.copy(
-                        id = 0,
-                        audioFile = audioName,
-                        photoFile = photoNames.joinPageNames(),
-                        sectionStartY = recording.sectionStartY.takeIf { complete },
-                        sectionEndY = recording.sectionEndY.takeIf { complete },
-                        documentFile = documentName,
-                        documentName = recording.documentName.takeIf { documentName != null },
-                    ),
-                )
-                imported++
+                if (importRecording(recording, staging)) imported++ else incomplete++
             }
             ImportResult(imported, skipped, incomplete, importLibrary(libraryEntries, staging))
         } finally {
             staging.deleteRecursively()
         }
+    }
+
+    /**
+     * Übernimmt eine Aufnahme samt Dateien; false, wenn ihre Audiodatei fehlt oder etwas
+     * schiefgeht – dann bleibt von ihr nichts zurück.
+     */
+    private suspend fun importRecording(recording: Recording, staging: File): Boolean {
+        val audio = File(staging, BackupFormat.AUDIO_DIR + recording.audioFile)
+        if (!audio.isFile) return false
+        val moved = mutableListOf<File>()
+        fun move(source: File, target: File) {
+            FileStore.move(source, target)
+            moved += target
+        }
+        return try {
+            val extension = audio.extension.lowercase().takeIf { it in AUDIO_EXTENSIONS } ?: "m4a"
+            val audioName = "${recording.uuid}.$extension"
+            move(audio, files.audio(audioName))
+            val photoNames = recording.photoPages
+                .map { File(staging, BackupFormat.PHOTO_DIR + it) }
+                .filter { it.isFile }
+                .mapIndexed { page, source -> RecordingRepository.newPhotoName(recording.uuid, page).also { move(source, files.photo(it)) } }
+            // Fehlt eine Seite, passen die Abschnittslinien nicht mehr sicher.
+            val complete = photoNames.size == recording.photoPages.size
+            val documentName = recording.documentFile
+                ?.let { File(staging, BackupFormat.DOCUMENT_DIR + it) }
+                ?.takeIf { it.isFile }
+                ?.let { source ->
+                    RecordingRepository.newDocumentName(recording.uuid, source.extension.lowercase()).also { move(source, files.document(it)) }
+                }
+            dao.insert(
+                recording.copy(
+                    id = 0,
+                    audioFile = audioName,
+                    photoFile = photoNames.joinPageNames(),
+                    sectionStartY = recording.sectionStartY.takeIf { complete },
+                    sectionEndY = recording.sectionEndY.takeIf { complete },
+                    documentFile = documentName,
+                    documentName = recording.documentName.takeIf { documentName != null },
+                ),
+            )
+            true
+        } catch (e: CancellationException) {
+            moved.forEach { it.delete() }
+            throw e
+        } catch (_: Exception) {
+            moved.forEach { it.delete() }
+            false
+        }
+    }
+
+    /** Liest höchstens [max] Bytes; null, wenn es mehr sind. */
+    private fun readLimited(input: InputStream, max: Int): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) return out.toByteArray()
+            if (out.size() + read > max) return null
+            out.write(buffer, 0, read)
+        }
+    }
+
+    /** Kopiert höchstens [budget] Bytes nach [target] und liefert die Anzahl. */
+    private fun copyLimited(input: InputStream, target: File, budget: Long): Long {
+        var total = 0L
+        target.outputStream().use { output ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > budget) {
+                    throw BackupException("Nicht genug Speicherplatz, um die Sicherung einzulesen. Gib etwas Speicher frei und versuche es noch einmal.")
+                }
+                output.write(buffer, 0, read)
+            }
+        }
+        return total
     }
 
     /** Übernimmt die Texte der Bibliothek, die es hier noch nicht gibt; Texte ohne ihre Dateien entfallen. */
@@ -218,6 +273,9 @@ class BackupManager(
     }
 
     companion object {
+        /** Größer ist keine echte Sicherung: Selbst tausende Aufnahmen brauchen nur wenige MB Manifest. */
+        private const val MAX_MANIFEST_BYTES = 32 * 1024 * 1024
+        private const val MAX_ENTRIES = 100_000
         private val AUDIO_EXTENSIONS = setOf("m4a", "mp4", "aac", "3gp", "ogg", "opus", "mp3", "wav")
 
         /**

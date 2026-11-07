@@ -131,6 +131,8 @@ fun TextAttachmentSection(
     documentContent: DocumentContent? = null,
     onPickFromLibrary: (() -> Unit)? = null,
     onAddToLibrary: (() -> Unit)? = null,
+    /** false: Der Text lässt sich ersetzen, aber nicht ganz entfernen (z. B. in der Bibliothek). */
+    removable: Boolean = true,
 ) {
     val context = LocalContext.current
     val canChange = enabled && !busy
@@ -146,10 +148,11 @@ fun TextAttachmentSection(
     var askNextPage by rememberSaveable { mutableStateOf(false) }
     var showPages by rememberSaveable { mutableStateOf(false) }
     val lastPage = photo?.pages?.lastOrNull()?.path
+    // Erst fragen, wenn nichts mehr läuft: Beim Bearbeiten werden gespeicherte Seiten vorher kopiert.
     LaunchedEffect(busy, lastPage, awaitingCamera) {
         if (!awaitingCamera) return@LaunchedEffect
         when {
-            lastPage != null && lastPage != lastPageBeforeCamera -> {
+            !busy && lastPage != null && lastPage != lastPageBeforeCamera -> {
                 awaitingCamera = false
                 sawImport = false
                 askNextPage = true
@@ -160,6 +163,10 @@ fun TextAttachmentSection(
                 sawImport = false
             }
         }
+    }
+    // Ohne Fotos gibt es keine Seiten mehr zu ordnen; sonst ginge die Übersicht beim nächsten Foto von selbst auf.
+    LaunchedEffect(photo == null) {
+        if (photo == null) showPages = false
     }
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) {
@@ -300,7 +307,7 @@ fun TextAttachmentSection(
                         var addMenu by remember { mutableStateOf(false) }
                         Box {
                             TextButton(onClick = { addMenu = true }, enabled = canChange) {
-                                ButtonLabel(Icons.Outlined.AddPhotoAlternate, "Seite")
+                                ButtonLabel(Icons.Outlined.AddPhotoAlternate, "Seite hinzufügen")
                             }
                             DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
                                 DropdownMenuItem(
@@ -378,8 +385,10 @@ fun TextAttachmentSection(
                         ButtonLabel(Icons.Outlined.Edit, "Bearbeiten")
                     }
                 }
-                TextButton(onClick = onRemove, enabled = canChange) {
-                    ButtonLabel(Icons.Outlined.Delete, "Entfernen")
+                if (removable) {
+                    TextButton(onClick = onRemove, enabled = canChange) {
+                        ButtonLabel(Icons.Outlined.Delete, "Entfernen")
+                    }
                 }
                 if (onAddToLibrary != null) {
                     TextButton(onClick = onAddToLibrary, enabled = canChange) {
@@ -409,6 +418,7 @@ fun TextAttachmentSection(
             onRotate = onRotatePage,
             onMove = onMovePage,
             onDelete = onDeletePage,
+            canDeleteLast = removable,
             onAddCamera = { openCamera(true) }.takeIf { enabled },
             onAddGallery = { openGallery(true) }.takeIf { enabled },
             onDismiss = { showPages = false },
@@ -590,18 +600,22 @@ private fun PhotoPages(
     val first = marks?.firstPage(photo.pages.size) ?: 0
     val pages = photo.pages.drop(first)
     val onMark = marks?.onMark
-    PhotoPager(
-        pages = pages,
-        zoomable = zoomable,
-        marks = { page ->
-            marks?.pageMarks(first + page) ?: PageMarks.section(first + page, photo.pages.size, photo.startY, photo.endY)
-        },
-        onTapPage = onMark?.let { mark ->
-            { page: Int, y: Float -> marks.tapPage(first + page, y, pages.getOrNull(page)?.name)?.let(mark) }
-        },
-        onClick = onClick.takeIf { onMark == null },
-        modifier = modifier,
-    )
+    // Ein anderer Text (oder ein anderer Anfang) beginnt auf seiner ersten Seite, nicht dort, wo der vorige stand.
+    key(photo.pages.firstOrNull(), first) {
+        PhotoPager(
+            pages = pages,
+            zoomable = zoomable,
+            marks = { page ->
+                marks?.pageMarks(first + page) ?: PageMarks.section(first + page, photo.pages.size, photo.startY, photo.endY)
+            },
+            onTapPage = onMark?.let {
+                { page: Int, y: Float -> marks.tapPage(first + page, photo.pages.size, y, pages.getOrNull(page)?.name) }
+            },
+            onClick = onClick.takeIf { onMark == null },
+            modifier = modifier,
+            pageOffset = first,
+        )
+    }
 }
 
 /** Vollbildansicht zum Durchwischen, mit Zwei-Finger-Zoom und Doppeltipp-Zoom. */

@@ -28,6 +28,7 @@ import de.emilybutterfly.stimmtraining.ui.importDraftPhotos
 import de.emilybutterfly.stimmtraining.ui.importFailureMessage
 import de.emilybutterfly.stimmtraining.ui.openWithChooser
 import de.emilybutterfly.stimmtraining.ui.pageFailureMessage
+import de.emilybutterfly.stimmtraining.ui.skippedPhotosMessage
 import de.emilybutterfly.stimmtraining.ui.prepareCameraCapture
 import de.emilybutterfly.stimmtraining.ui.putParams
 import kotlinx.coroutines.CancellationException
@@ -168,9 +169,11 @@ class DetailViewModel(
         if (uris.isEmpty()) return
         val limited = uris.take(TextAttachment.MAX_PAGES)
         if (addPage) {
-            addPages { files.importDraftPhotos(app, limited) }
+            addPages { files.importDraftPhotos(app, limited) { _message.value = skippedPhotosMessage(it) } }
         } else {
-            importAttachment(isPhoto = true) { DraftPages.append(null, files.importDraftPhotos(app, limited)).first }
+            importAttachment(isPhoto = true) {
+                DraftPages.append(null, files.importDraftPhotos(app, limited) { _message.value = skippedPhotosMessage(it) }).first
+            }
         }
         if (uris.size > limited.size) _message.value = TOO_MANY_PAGES
     }
@@ -335,10 +338,16 @@ class DetailViewModel(
 
     // --- Bibliothek ---
 
+    private val _addingToLibrary = MutableStateFlow(false)
+    val addingToLibrary: StateFlow<Boolean> = _addingToLibrary.asStateFlow()
+
     /** Legt eine Kopie des Texts in die Bibliothek; die Aufnahme behält ihren eigenen. */
     fun addToLibrary() {
         val recording = current ?: return
         val attachment = attachment(recording) ?: return
+        // Ein zweiter Tipp während des Kopierens legt den Text nicht doppelt an.
+        if (_addingToLibrary.value) return
+        _addingToLibrary.value = true
         viewModelScope.launch {
             try {
                 withContext(NonCancellable) {
@@ -349,6 +358,8 @@ class DetailViewModel(
                 _message.value = "In die Bibliothek gelegt – dort lässt sich der Text weiterlesen."
             } catch (e: Exception) {
                 _message.value = "Das Übernehmen in die Bibliothek ist fehlgeschlagen: ${e.message}"
+            } finally {
+                _addingToLibrary.value = false
             }
         }
     }

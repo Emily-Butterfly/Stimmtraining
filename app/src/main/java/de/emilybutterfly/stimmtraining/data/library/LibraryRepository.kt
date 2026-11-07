@@ -68,6 +68,8 @@ class LibraryRepository(
     suspend fun add(attachment: TextAttachment, title: String, tags: List<String> = emptyList(), move: Boolean): Long =
         withContext(Dispatchers.IO) {
             val uuid = UUID.randomUUID().toString()
+            // Das Lesen dauert; erst danach ablegen, damit die Dateien nur kurz ohne Datenbankzeile sind.
+            val body = searchBody(attachment)
             val stored = store(uuid, attachment, move)
             try {
                 val now = System.currentTimeMillis()
@@ -81,7 +83,7 @@ class LibraryRepository(
                     createdAt = now,
                     updatedAt = now,
                 )
-                dao.insertWithSearch(text, searchContent(text))
+                dao.insertWithSearch(text, searchContent(text, body))
             } catch (e: Exception) {
                 stored.undo()
                 throw e
@@ -97,8 +99,7 @@ class LibraryRepository(
             pinned = pinned,
             updatedAt = System.currentTimeMillis(),
         )
-        dao.update(updated)
-        dao.upsertSearch(LibrarySearch(id, searchContent(updated)))
+        dao.updateWithSearch(updated, searchContent(updated))
     }
 
     suspend fun setPinned(id: Long, pinned: Boolean) = withContext(Dispatchers.IO) {
@@ -125,32 +126,33 @@ class LibraryRepository(
             updateDetails(id, title, tags, current.pinned)
             return@withContext false
         }
+        // Alles Langsame (Text lesen, Stelle suchen) vor dem Ablegen der Dateien, und dann Zeile
+        // und Suchinhalt in einem Schritt: So zeigt nie etwas auf halb Gespeichertes.
+        val body = searchBody(replacement)
+        val progress = current.progress
+        val relocatedText = (progress as? ReadingPosition.InText)?.let { relocated(it, replacement) }
         val stored = store(current.uuid, replacement, move = true)
-        var lost = false
-        val updated = try {
-            val withContent = current.copy(
+        val lost: Boolean
+        try {
+            val moved = when (progress) {
+                null -> null
+                is ReadingPosition.OnPage -> movedPage(progress, origins, stored.photoFiles)
+                is ReadingPosition.InText -> relocatedText
+            }
+            lost = progress != null && moved == null
+            val result = current.copy(
                 title = cleanTitle(title),
                 tags = LibraryText.joinTags(tags),
                 photoFiles = stored.photoFiles,
                 documentFile = stored.documentFile,
                 documentName = stored.documentName,
                 updatedAt = System.currentTimeMillis(),
-            )
-            val progress = current.progress
-            val moved = when (progress) {
-                null -> null
-                is ReadingPosition.OnPage -> movedPage(progress, origins, stored.photoFiles)
-                is ReadingPosition.InText -> attachmentOf(withContent)?.let { relocated(progress, it) }
-            }
-            lost = progress != null && moved == null
-            val result = withContent.withProgress(moved?.first, moved?.second)
-            dao.update(result)
-            result
+            ).withProgress(moved?.first, moved?.second)
+            dao.updateWithSearch(result, searchContent(result, body))
         } catch (e: Exception) {
             stored.undo()
             throw e
         }
-        dao.upsertSearch(LibrarySearch(id, searchContent(updated)))
         val kept = (stored.photoFiles?.split('\n').orEmpty() + listOfNotNull(stored.documentFile)).toSet()
         (current.photoPages + listOfNotNull(current.documentFile)).filter { it !in kept }.forEach { files.library(it).delete() }
         lost
@@ -159,23 +161,35 @@ class LibraryRepository(
     /** Setzt die gelesene Stelle (z. B. von Hand korrigiert); null beginnt den Text von vorne. */
     suspend fun setProgress(id: Long, position: ReadingPosition?) = withContext(Dispatchers.IO) {
         val current = dao.get(id) ?: return@withContext
-        val fraction = position?.let { fractionOf(current, it) }
-        dao.update(current.withProgress(position, fraction).copy(finishedAt = null, updatedAt = System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        val measured = position?.let { measure(current, it) }
+        // Bis zum letzten Satz bzw. Seitenende gesetzt: Dann ist der Text zu Ende gelesen.
+        val updated = if (measured?.atEnd == true) {
+            current.withProgress(null, null).copy(finishedAt = now)
+        } else {
+            current.withProgress(position, measured?.fraction).copy(finishedAt = null)
+        }
+        dao.update(updated.copy(updatedAt = now))
     }
 
-    /** Wie viel bis [position] gelesen ist (0..1), für die Anzeige in der Liste. */
-    private fun fractionOf(text: LibraryText, position: ReadingPosition): Float? {
+    private class Measured(val fraction: Float?, val atEnd: Boolean)
+
+    /** Wie viel bis [position] gelesen ist (0..1), für die Anzeige in der Liste, und ob damit alles gelesen ist. */
+    private fun measure(text: LibraryText, position: ReadingPosition): Measured? {
         val attachment = attachmentOf(text) ?: return null
         return when (position) {
             is ReadingPosition.InText -> (attachment as? TextAttachment.Document)?.takeIf { it.kind != DocumentKind.Pdf }
                 ?.let { runCatching { DocumentText.read(it.file, it.kind) }.getOrNull() }
-                ?.let { TextProgress.fraction(TextLayout(it), position.offset) }
+                ?.let { TextLayout(it) }
+                ?.let {
+                    Measured(TextProgress.fraction(it, position.offset), TextProgress.isAtEnd(it, position.offset) && !it.document.truncated)
+                }
             is ReadingPosition.OnPage -> {
                 val pages = when (attachment) {
                     is TextAttachment.Photo -> attachment.pages.size
                     is TextAttachment.Document -> runCatching { PdfPages.open(attachment.file).use { it.pageCount } }.getOrNull()
                 } ?: return null
-                ((position.page + position.y) / pages).coerceIn(0f, 1f)
+                Measured(((position.page + position.y) / pages).coerceIn(0f, 1f), position.page >= pages - 1 && position.y >= LAST_LINES)
             }
         }
     }
@@ -231,13 +245,19 @@ class LibraryRepository(
                 is TextAttachment.Photo -> {
                     val index = progress.pageName?.let { name -> attachment.pages.indexOfFirst { it.name == name } }
                         ?.takeIf { it >= 0 } ?: progress.page.takeIf { progress.pageName == null }
-                    if (index == null || index !in attachment.pages.indices) {
-                        StartPoint(null, lost = true)
-                    } else {
-                        StartPoint(progress.copy(page = index, pageName = attachment.pages[index].name))
+                    when {
+                        index == null || index !in attachment.pages.indices -> StartPoint(null, lost = true)
+                        // Bis zum Seitenende gelesen: weiter oben auf der nächsten Seite statt auf einer ganz grauen.
+                        progress.y >= PAGE_END && index < attachment.pages.lastIndex ->
+                            StartPoint(ReadingPosition.OnPage(index + 1, 0f, attachment.pages[index + 1].name))
+                        else -> StartPoint(progress.copy(page = index, pageName = attachment.pages[index].name))
                     }
                 }
-                is TextAttachment.Document -> if (attachment.kind == DocumentKind.Pdf) StartPoint(progress) else StartPoint(null, lost = true)
+                is TextAttachment.Document -> when {
+                    attachment.kind != DocumentKind.Pdf -> StartPoint(null, lost = true)
+                    progress.y >= PAGE_END -> StartPoint(ReadingPosition.OnPage(progress.page + 1, 0f))
+                    else -> StartPoint(progress)
+                }
             }
         }
     }
@@ -290,7 +310,7 @@ class LibraryRepository(
             }
         }
         val fraction = end?.let { ((to + (endY ?: 1f)) / photo.pages.size) }
-        return Section(TextAttachment.Photo(pages, startY, endY), fraction, finished = to == last && endY == null)
+        return Section(TextAttachment.Photo(pages, startY, endY), fraction, finished = to == last && (endY ?: 1f) >= LAST_LINES)
     }
 
     private fun pdfSection(
@@ -299,15 +319,22 @@ class LibraryRepository(
         end: ReadingPosition.OnPage?,
         created: MutableList<File>,
     ): Section {
-        if (start == null && end == null) {
+        fun wholeDocument(fraction: Float?, finished: Boolean): Section {
             val copy = files.newDraftFile("pdf").also { created += it }
             document.file.copyTo(copy, overwrite = true)
-            return Section(TextAttachment.Document(copy, document.name), null, finished = true)
+            return Section(TextAttachment.Document(copy, document.name), fraction, finished)
         }
+        if (start == null && end == null) return wholeDocument(null, finished = true)
         PdfPages.open(document.file).use { pdf ->
+            if (pdf.pageCount == 0) return wholeDocument(null, finished = true)
             val last = pdf.pageCount - 1
             val from = (start?.page ?: 0).coerceIn(0, last)
             val to = (end?.page ?: last).coerceIn(from, last)
+            // Mehr Seiten als ein Anhang fasst: dann das ganze PDF statt eines riesigen Stapels Bilder.
+            if (to - from + 1 > TextAttachment.MAX_PAGES) {
+                val endY = end?.y?.takeIf { it < PAGE_END }
+                return wholeDocument(end?.let { (to + (endY ?: 1f)) / pdf.pageCount }, finished = to == last && (endY ?: 1f) >= LAST_LINES)
+            }
             val startY = start?.y?.takeIf { it > 0f }
             val endY = end?.y?.takeIf { it < PAGE_END }?.let { if (to == from && startY != null) it.coerceAtLeast(startY) else it }
             val pages = (from..to).map { index ->
@@ -322,7 +349,7 @@ class LibraryRepository(
                 }
             }
             val fraction = end?.let { ((to + (endY ?: 1f)) / pdf.pageCount) }
-            return Section(TextAttachment.Photo(pages, startY, endY), fraction, finished = to == last && endY == null)
+            return Section(TextAttachment.Photo(pages, startY, endY), fraction, finished = to == last && (endY ?: 1f) >= LAST_LINES)
         }
     }
 
@@ -344,7 +371,8 @@ class LibraryRepository(
         val to = (end?.offset ?: layout.length).coerceIn(from, layout.length)
         val section = TextProgress.section(content, from, to)
         val fraction = end?.let { TextProgress.fraction(layout, to) }
-        val finished = TextProgress.isAtEnd(layout, to)
+        // Bei einem gekürzten Text ist das angezeigte Ende nicht das Ende des Texts.
+        val finished = TextProgress.isAtEnd(layout, to) && !content.truncated
         if (section.isBlank()) return Section(null, fraction, finished)
         val draft = files.newDraftFile(DocumentKind.Markdown.extension).also { created += it }
         draft.writeText(MarkdownWriter.write(section))
@@ -376,7 +404,13 @@ class LibraryRepository(
         val done = mutableListOf<Pair<File, File>>()
         fun put(source: File, name: String) {
             val target = files.library(name)
-            if (move) FileStore.move(source, target) else source.copyTo(target, overwrite = true)
+            try {
+                if (move) FileStore.move(source, target) else source.copyTo(target, overwrite = true)
+            } catch (e: Exception) {
+                // Eine halb geschriebene Kopie (z. B. Speicher voll) nicht liegen lassen; das Original ist noch da.
+                target.delete()
+                throw e
+            }
             done += source to target
         }
         val undo = {
@@ -423,12 +457,34 @@ class LibraryRepository(
         return resolved to TextProgress.fraction(TextLayout(text), resolved.offset)
     }
 
-    private fun searchContent(text: LibraryText): String {
-        val body = (attachmentOf(text) as? TextAttachment.Document)
-            ?.takeIf { it.kind != DocumentKind.Pdf }
-            ?.let { runCatching { DocumentText.read(it.file, it.kind, maxChars = SEARCH_CHARS).plainText }.getOrNull() }
-            .orEmpty()
-        return normalize(listOf(text.title, text.tags, body).joinToString("\n"))
+    private fun searchContent(text: LibraryText, body: String = searchBody(attachmentOf(text))): String =
+        normalize(listOf(text.title, text.tags, body).joinToString("\n"))
+
+    /** Der durchsuchbare Text eines Anhangs; Fotos und PDFs haben keinen. */
+    private fun searchBody(attachment: TextAttachment?): String = (attachment as? TextAttachment.Document)
+        ?.takeIf { it.kind != DocumentKind.Pdf }
+        ?.let { runCatching { DocumentText.read(it.file, it.kind, maxChars = SEARCH_CHARS).plainText }.getOrNull() }
+        .orEmpty()
+
+    /**
+     * Ist der Text länger, als die App anzeigt (etwa 150 Buchseiten)? Dann lässt sich nur der
+     * Anfang lesen – das sollte man beim Ablegen in der Bibliothek erfahren.
+     */
+    suspend fun isShortened(attachment: TextAttachment): Boolean = withContext(Dispatchers.IO) {
+        val document = attachment as? TextAttachment.Document ?: return@withContext false
+        document.kind != DocumentKind.Pdf && runCatching { DocumentText.read(document.file, document.kind).truncated }.getOrDefault(false)
+    }
+
+    /**
+     * Räumt Dateien in der Bibliothek weg, auf die kein Text mehr zeigt (z. B. weil die App beim
+     * Ablegen beendet wurde). Nur ältere, damit nichts gerade Abgelegtes verschwindet.
+     */
+    suspend fun cleanOrphans() = withContext(Dispatchers.IO) {
+        val referenced = dao.getAll().flatMap { it.photoPages + listOfNotNull(it.documentFile) }.toSet()
+        val cutoff = System.currentTimeMillis() - 60L * 60 * 1000
+        files.libraryDir.listFiles()
+            ?.filter { it.isFile && it.name !in referenced && it.lastModified() < cutoff }
+            ?.forEach { it.delete() }
     }
 
     companion object {
@@ -441,7 +497,17 @@ class LibraryRepository(
 
         /** Eine Linie so weit unten zählt als „bis zum Seitenende“. */
         private const val PAGE_END = 0.98f
+
+        /**
+         * Ab hier zählt eine Linie auf der letzten Seite als „bis zum Ende gelesen“: Die letzte
+         * Zeile steht wegen des Seitenrands selten ganz unten.
+         */
+        const val LAST_LINES = 0.85f
         private const val MAX_TITLE = 120
+
+        /** Hinweis, wenn ein Text länger ist, als die App anzeigt (siehe [isShortened]). */
+        const val SHORTENED =
+            "Der Text ist sehr lang: Angezeigt und gelesen werden nur die ersten etwa 150 Buchseiten. Teile ihn für den Rest auf."
 
         /** Titel für fotografierte Texte, z. B. „Fotos vom 3. November 2026“. */
         fun photoTitle(attachment: TextAttachment): String {

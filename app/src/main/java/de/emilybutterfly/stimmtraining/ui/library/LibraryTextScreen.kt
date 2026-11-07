@@ -105,6 +105,7 @@ fun LibraryTextScreen(
     val reader = rememberReaderSettings()
     var viewing by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    var confirmRestart by rememberSaveable { mutableStateOf(false) }
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     var markingPosition by rememberSaveable { mutableStateOf(false) }
 
@@ -193,6 +194,8 @@ fun LibraryTextScreen(
                     onDocumentPicked = editor::onDocumentPicked,
                     onTextPasted = editor::onTextPasted,
                     onRemove = editor::remove,
+                    removable = viewModel.isNew,
+                    enabled = !editing.saving,
                     onExpand = { viewing = true },
                     onOpenExternally = { document -> viewModel.openExternally(document) { context.startActivity(it) } },
                 )
@@ -222,7 +225,7 @@ fun LibraryTextScreen(
                     text = text,
                     onRecord = { onRecord(text.id) },
                     onMarkPosition = { markingPosition = true },
-                    onRestart = { viewModel.setProgress(null) },
+                    onRestart = { confirmRestart = true },
                     onReadAgain = viewModel::readAgain,
                 )
                 if (text.tagList.isNotEmpty()) {
@@ -264,6 +267,21 @@ fun LibraryTextScreen(
                 onDismiss = { markingPosition = false },
             )
         }
+    }
+
+    if (confirmRestart) {
+        AlertDialog(
+            onDismissRequest = { confirmRestart = false },
+            title = { Text("Von vorne beginnen?") },
+            text = { Text("Die Stelle, bis zu der du gelesen hast, wird vergessen. Deine Aufnahmen bleiben, wie sie sind.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestart = false
+                    viewModel.setProgress(null)
+                }) { Text("Von vorne") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRestart = false }) { Text("Abbrechen") } },
+        )
     }
 
     if (confirmDelete) {

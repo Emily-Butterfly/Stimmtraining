@@ -56,6 +56,13 @@ interface LibraryDao {
         return id
     }
 
+    /** Text und Suchinhalt zusammen: Nie zeigt die Suche auf einen anderen Stand als die Zeile. */
+    @Transaction
+    suspend fun updateWithSearch(text: LibraryText, content: String) {
+        update(text)
+        upsertSearch(LibrarySearch(text.id, content))
+    }
+
     @Query("DELETE FROM library_search WHERE textId = :id")
     suspend fun deleteSearch(id: Long)
 

@@ -151,7 +151,13 @@ fun RecordScreen(
     // Ein Bibliothekstext zeigt nur den Rest; angetippt wird, bis wohin gelesen wurde.
     val library = state.library
     val marks = library?.let {
-        ReadingMarks(start = it.start, end = it.end, onMark = viewModel::markLibraryEnd.takeIf { !state.saving })
+        ReadingMarks(
+            start = it.start,
+            end = it.end,
+            onMark = viewModel::markLibraryEnd.takeIf { !state.saving },
+            // Der letzte Satz (bzw. die letzten Zeilen) angetippt: „Bis zum Ende“.
+            onMarkEnd = { viewModel.markLibraryEnd(null) },
+        )
     }
     // Einmal geladen, für Karte und Lesemodus: kein erneutes Laden und kein Springen beim Umschalten.
     val attachedDocument = shownText as? TextAttachment.Document
@@ -164,6 +170,11 @@ fun RecordScreen(
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         if (granted) viewModel.startRecording() else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    // Nach dem Stoppen soll die Frage „Wie weit hast du gelesen?“ zu sehen sein, nicht irgendwo weiter unten.
+    LaunchedEffect(state.phase == RecorderPhase.Done, library != null) {
+        if (state.phase == RecorderPhase.Done && library != null) formScroll.animateScrollTo(0)
     }
 
     // Aus der Bibliothek gewählt: einmal übernehmen.
@@ -249,7 +260,14 @@ fun RecordScreen(
         if (reading && shownText != null) {
             // Der Text füllt den Platz zwischen Titelleiste und Aufnahme-Knöpfen.
             Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
-                if (library != null) MarkHint(library, onToEnd = { viewModel.markLibraryEnd(null) })
+                if (library != null) {
+                    MarkHint(
+                        library,
+                        finished = state.phase == RecorderPhase.Done,
+                        enabled = !state.saving,
+                        onToEnd = { viewModel.markLibraryEnd(null) },
+                    )
+                }
                 AttachmentReader(
                     shownText,
                     reader,
@@ -387,23 +405,28 @@ fun RecordScreen(
     }
 }
 
-/** Hinweis über dem Text im Lesemodus: antippen, bis wohin gelesen wurde. */
+/**
+ * Hinweis über dem Text im Lesemodus: antippen, bis wohin gelesen wurde. Nach dem Stoppen
+ * ([finished]) steht hier die Frage „Wie weit hast du gelesen?“ samt dem, was ohne Antippen gilt.
+ */
 @Composable
-private fun MarkHint(reading: LibraryReading, onToEnd: () -> Unit) {
+private fun MarkHint(reading: LibraryReading, finished: Boolean, enabled: Boolean, onToEnd: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (reading.end == null) {
-                    "Tippe auf die Stelle, bis zu der du gelesen hast."
-                } else {
-                    "Gelesen ${describeEnd(reading.end)}. Tippe neu, um es zu ändern."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (reading.end != null) TextButton(onClick = onToEnd) { Text("Bis zum Ende") }
+            Column(Modifier.weight(1f)) {
+                if (finished) Text("Wie weit hast du gelesen?", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    when {
+                        reading.end != null -> "Gelesen ${describeEnd(reading.end, maxAnchor = 30)}. Tippe neu, um es zu ändern."
+                        finished -> "Tippe auf die Stelle. Ohne Antippen gilt: bis zum Ende gelesen."
+                        else -> "Tippe auf die Stelle, bis zu der du gelesen hast."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (reading.end != null) TextButton(onClick = onToEnd, enabled = enabled) { Text("Bis zum Ende") }
         }
     }
 }
@@ -516,10 +539,10 @@ private fun LibraryReadingCard(
 }
 
 /** „bis zum Ende“, „bis „…Satzende““ oder „bis Seite 3“. */
-private fun describeEnd(end: ReadingPosition?): String = when (end) {
+private fun describeEnd(end: ReadingPosition?, maxAnchor: Int = 50): String = when (end) {
     null -> "bis zum Ende"
     is ReadingPosition.InText -> {
-        val tail = end.anchor.takeLast(50)
+        val tail = end.anchor.takeLast(maxAnchor)
         "bis „${if (tail.length < end.anchor.length) "…$tail" else tail}“"
     }
     is ReadingPosition.OnPage -> "bis Seite ${end.page + 1}"

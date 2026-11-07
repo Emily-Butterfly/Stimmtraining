@@ -71,6 +71,7 @@ import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -79,6 +80,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import de.emilybutterfly.stimmtraining.data.TextAttachment
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.min
 
 /**
@@ -161,7 +163,8 @@ internal fun fitRect(container: Size, image: Size?): Rect? {
  * Fotoseiten zum Durchwischen. Mit [zoomable] lässt sich jede Seite mit zwei Fingern oder
  * Doppeltipp vergrößern; vergrößert verschiebt ein Finger das Bild statt zu blättern.
  * [onTapPage] bekommt die angetippte Höhe (0..1) einer Seite, z. B. „bis hier gelesen“;
- * sonst löst ein Tipp [onClick] aus.
+ * sonst löst ein Tipp [onClick] aus. Sind vorne Seiten ausgeblendet (beim Weiterlesen), zählen
+ * die Seitennummern mit [pageOffset] trotzdem ab der ersten Seite des Texts.
  */
 @Composable
 fun PhotoPager(
@@ -174,7 +177,9 @@ fun PhotoPager(
     onClick: (() -> Unit)? = null,
     state: PagerState = rememberPagerState { pages.size },
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    pageOffset: Int = 0,
 ) {
+    val total = pages.size + pageOffset
     Box(modifier) {
         HorizontalPager(
             state = state,
@@ -191,10 +196,10 @@ fun PhotoPager(
                 marks = marks(index),
                 onTapY = onTapPage?.let { tap -> { y: Float -> tap(index, y) } },
                 onClick = onClick,
-                contentDescription = if (pages.size > 1) "Seite ${index + 1} von ${pages.size}" else "Foto des Textes",
+                contentDescription = if (total > 1) "Seite ${pageOffset + index + 1} von $total" else "Foto des Textes",
             )
         }
-        if (pages.size > 1) {
+        if (total > 1) {
             Surface(
                 shape = RoundedCornerShape(50),
                 color = if (onDark) Color.Black.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
@@ -202,7 +207,7 @@ fun PhotoPager(
                 modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp),
             ) {
                 Text(
-                    "${state.currentPage + 1} / ${pages.size}",
+                    "${pageOffset + state.currentPage + 1} / $total",
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                 )
@@ -242,7 +247,16 @@ fun ZoomableImage(
     Box(
         modifier
             .onSizeChanged { size = it }
-            .semantics { this.contentDescription = contentDescription }
+            .semantics {
+                this.contentDescription = contentDescription
+                // Ohne Antippen einer bestimmten Zeile, z. B. mit TalkBack: bis zum Seitenende gelesen.
+                if (onTapY != null) {
+                    onClick(label = "Bis zum Ende dieser Seite gelesen") {
+                        currentOnTapY?.invoke(1f)
+                        true
+                    }
+                }
+            }
             .then(
                 if (!zoomable) {
                     Modifier
@@ -253,11 +267,16 @@ fun ZoomableImage(
                             do {
                                 val event = awaitPointerEvent()
                                 // Nur Zoomen oder ein vergrößertes Bild verschieben; sonst darf der Pager blättern.
-                                if (event.changes.count { it.pressed } >= 2 || scale > 1f) {
+                                val fingers = event.changes.count { it.pressed }
+                                if (fingers >= 2 || scale > 1f) {
+                                    val pan = event.calculatePan()
                                     val newScale = (scale * event.calculateZoom()).coerceIn(1f, 6f)
+                                    val moved = if (newScale == 1f) Offset.Zero else clamp(offset + pan, newScale)
+                                    // Vergrößert am Bildrand weiter seitwärts gewischt: Dann blättert der Pager um.
+                                    val atEdge = fingers < 2 && newScale == scale && abs(pan.x) > abs(pan.y) && moved.x == offset.x
                                     scale = newScale
-                                    offset = if (newScale == 1f) Offset.Zero else clamp(offset + event.calculatePan(), newScale)
-                                    event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                    offset = moved
+                                    if (!atEdge) event.changes.forEach { if (it.positionChanged()) it.consume() }
                                 }
                             } while (event.changes.any { it.pressed })
                         }
@@ -336,6 +355,8 @@ fun PageOverviewDialog(
     onAddCamera: (() -> Unit)?,
     onAddGallery: (() -> Unit)?,
     onDismiss: () -> Unit,
+    /** false: Die letzte Seite lässt sich nicht löschen (ein Text braucht einen Inhalt). */
+    canDeleteLast: Boolean = true,
 ) {
     var confirmDelete by rememberSaveable { mutableStateOf<Int?>(null) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -378,6 +399,7 @@ fun PageOverviewDialog(
                             index = index,
                             count = pages.size,
                             enabled = !busy,
+                            deletable = pages.size > 1 || canDeleteLast,
                             onRotate = { clockwise -> onRotate(index, clockwise) },
                             onMove = { delta -> onMove(index, index + delta) },
                             onDelete = { confirmDelete = index },
@@ -415,6 +437,7 @@ private fun PageRow(
     index: Int,
     count: Int,
     enabled: Boolean,
+    deletable: Boolean,
     onRotate: (clockwise: Boolean) -> Unit,
     onMove: (delta: Int) -> Unit,
     onDelete: () -> Unit,
@@ -446,7 +469,7 @@ private fun PageRow(
                     IconButton(onClick = { onRotate(true) }, enabled = enabled) {
                         Icon(Icons.AutoMirrored.Filled.RotateRight, contentDescription = "Seite ${index + 1} nach rechts drehen")
                     }
-                    IconButton(onClick = onDelete, enabled = enabled) {
+                    IconButton(onClick = onDelete, enabled = enabled && deletable) {
                         Icon(Icons.Outlined.Delete, contentDescription = "Seite ${index + 1} löschen")
                     }
                 }

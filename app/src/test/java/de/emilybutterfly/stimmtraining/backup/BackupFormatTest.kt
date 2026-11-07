@@ -154,4 +154,35 @@ class BackupFormatTest {
         assertEquals(0.25f, parsed.sectionStartY)
         assertEquals(0.75f, parsed.sectionEndY)
     }
+
+    @Test
+    fun hugeTextFieldsAreShortenedSoTheDatabaseStaysReadable() {
+        val json = JSONObject(BackupFormat.manifest(listOf(sample), 1L, "1.0"))
+        json.getJSONArray("recordings").getJSONObject(0)
+            .put("notes", "x".repeat(2_200_000))
+            .put("title", "Titel\u0000mit\u0007Steuerzeichen" + "y".repeat(10_000))
+        val parsed = BackupFormat.parse(json.toString()).single().recording
+        assertEquals(Recording.MAX_NOTES, parsed.notes.length)
+        assertEquals(Recording.MAX_TITLE, parsed.title.length)
+        assertTrue(parsed.title.startsWith("TitelmitSteuerzeichen"))
+    }
+
+    @Test
+    fun duplicatePagesFutureTimestampsAndOddUuidsAreRepaired() {
+        val json = JSONObject(BackupFormat.manifest(listOf(sample), 1L, "1.0"))
+        json.getJSONArray("recordings").getJSONObject(0)
+            .put("photos", JSONArray().put("photos/a.jpg").put("photos/a.jpg").put("photos/b.jpg"))
+            .put("updatedAt", 4_102_444_800_000)
+            .put("uuid", "--------")
+        val parsed = BackupFormat.parse(json.toString()).single().recording
+        assertEquals(listOf("a.jpg", "b.jpg"), parsed.photoPages)
+        assertTrue("nicht in der Zukunft", parsed.updatedAt <= System.currentTimeMillis())
+        assertTrue("UUID beginnt wie ein sicherer Dateiname", parsed.uuid.first().isLetterOrDigit())
+    }
+
+    @Test
+    fun aDeeplyNestedManifestIsRejectedInsteadOfCrashing() {
+        val evil = "{\"format\":\"stimmtraining-backup\",\"x\":" + "[".repeat(200_000) + "]".repeat(200_000) + "}"
+        assertThrows(BackupException::class.java) { BackupFormat.parse(evil) }
+    }
 }

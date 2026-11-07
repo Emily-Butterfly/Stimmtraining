@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import de.emilybutterfly.stimmtraining.data.document.TextDocument
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
 import de.emilybutterfly.stimmtraining.data.library.TextLayout
 import de.emilybutterfly.stimmtraining.data.library.TextProgress
@@ -27,6 +28,11 @@ data class ReadingMarks(
     val end: ReadingPosition? = null,
     val onMark: ((ReadingPosition) -> Unit)? = null,
     val showAll: Boolean = false,
+    /**
+     * Wird statt [onMark] aufgerufen, wenn das Ende angetippt wurde (letzter Satz bzw. die
+     * untersten Zeilen der letzten Seite): Dann ist der Text zu Ende gelesen.
+     */
+    val onMarkEnd: (() -> Unit)? = null,
 ) {
     private val startPage: ReadingPosition.OnPage? get() = start as? ReadingPosition.OnPage
     private val endPage: ReadingPosition.OnPage? get() = end as? ReadingPosition.OnPage
@@ -58,13 +64,20 @@ data class ReadingMarks(
     }
 
     /**
-     * Die Stelle „bis hier gelesen“ für einen Tipp auf Seite [page] in Höhe [y]; null für einen Tipp
-     * auf schon früher Gelesenes.
+     * Ein Tipp auf Seite [page] (von [pageCount]) in Höhe [y]: setzt die Stelle „bis hier gelesen“.
+     * Tipps auf schon früher Gelesenes zählen nicht.
      */
-    fun tapPage(page: Int, y: Float, pageName: String?): ReadingPosition.OnPage? {
+    fun tapPage(page: Int, pageCount: Int, y: Float, pageName: String?) {
+        val onMark = onMark ?: return
         val from = startPage
-        if (!showAll && from != null && (page < from.page || (page == from.page && y <= from.y))) return null
-        return ReadingPosition.OnPage(page, y.coerceIn(0f, 1f), pageName)
+        if (!showAll && from != null && (page < from.page || (page == from.page && y <= from.y))) return
+        val end = onMarkEnd
+        // Die unterste Zeile der letzten Seite steht wegen des Rands selten ganz unten.
+        if (end != null && page >= pageCount - 1 && y >= LibraryRepository.LAST_LINES) {
+            end()
+        } else {
+            onMark(ReadingPosition.OnPage(page, y.coerceIn(0f, 1f), pageName))
+        }
     }
 }
 
@@ -122,11 +135,14 @@ class TextReading(
         var offset = blockStart + shown.from + local
         // Hinter dem Zeilenende oder auf Leerraum getippt: gemeint ist der Satz davor, nicht der nächste.
         val text = layout.plainText
-        if (offset > blockStart && (offset >= text.length || text[offset].isWhitespace())) offset--
+        while (offset > blockStart && (offset >= text.length || text[offset].isWhitespace())) offset--
         // Schon früher Gelesenes (blass) zählt nicht.
         if (!marks.showAll && marks.start != null && offset < startOffset) return
         val sentence = layout.sentenceAt(offset) ?: return
-        onMark(TextProgress.after(layout, sentence))
+        val position = TextProgress.after(layout, sentence)
+        val end = marks.onMarkEnd
+        // Bei einem gekürzten Text ist das angezeigte Ende nicht das Ende des Texts.
+        if (end != null && !layout.document.truncated && TextProgress.isAtEnd(layout, position.offset)) end() else onMark(position)
     }
 }
 

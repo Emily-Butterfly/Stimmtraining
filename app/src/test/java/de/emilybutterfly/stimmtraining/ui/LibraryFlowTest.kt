@@ -250,4 +250,81 @@ class LibraryFlowTest {
         assertEquals(emptyList<Long>(), matches("nordwind"))
         assertEquals(DocumentKind.PlainText, (library.attachmentOf(library.get(id)!!) as TextAttachment.Document).kind)
     }
+
+    @Test
+    fun savingIsRefusedWhenTheReadSectionCannotBeMadeAndNothingIsLost() {
+        val pages = (1..2).map { n -> container.files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(n.toByte())) } }
+        val id = runBlocking { library.add(TextAttachment.Photo(pages), "Buch", move = true) }
+        val (take, _) = finishedTake(id)
+        // Eine Seite fehlt plötzlich (z. B. nach einem unvollständigen Backup).
+        runBlocking { library.attachmentOf(library.get(id)!!)!!.files.first().delete() }
+        var saved: Long? = null
+        take.save { saved = it }
+        waitFor { !take.state.value.saving }
+        assertNull("nicht gespeichert", saved)
+        assertTrue(take.state.value.message!!.contains("Abschnitt"))
+        assertNotNull("Aufnahme liegt noch vor", take.state.value.audio)
+        assertNull("Fortschritt unverändert", runBlocking { library.get(id)!!.progress })
+    }
+
+    @Test
+    fun aNewTakeAsksAgainWithToTheEndPreselected() {
+        val id = addStory()
+        val (take, _) = finishedTake(id)
+        take.markLibraryEnd(after("Zweiter Satz."))
+        take.discardRecording()
+        assertNull(take.state.value.library!!.end)
+        assertEquals(id, take.state.value.library!!.textId)
+    }
+
+    @Test
+    fun aPageReadToItsBottomContinuesOnTheNextPage() = runBlocking {
+        val pages = (1..3).map { n -> container.files.newDraftFile("jpg").apply { writeBytes(byteArrayOf(n.toByte())) } }
+        val id = library.add(TextAttachment.Photo(pages), "Buch", move = true)
+        val names = library.get(id)!!.photoPages
+        library.recordReading(id, ReadingPosition.OnPage(0, 0.99f, names[0]), 0.33f)
+        assertEquals(ReadingPosition.OnPage(1, 0f, names[1]), library.startOf(library.get(id)!!).position)
+    }
+
+    @Test
+    fun settingThePositionToTheEndByHandFinishesTheText() = runBlocking {
+        val id = addStory()
+        library.setProgress(id, after("Fünfter Satz."))
+        val text = library.get(id)!!
+        assertNotNull(text.finishedAt)
+        assertNull(text.progress)
+        // Mittendrin bleibt er unter „Zu lesen“.
+        library.readAgain(id)
+        library.setProgress(id, after("Dritter Satz."))
+        assertNull(library.get(id)!!.finishedAt)
+    }
+
+    @Test
+    fun aShortenedLongTextIsNeverTakenAsReadByItsVisibleEnd() = runBlocking {
+        val long = "Ein Satz zum Lesen. ".repeat(20_000) // 400.000 Zeichen, mehr als angezeigt wird
+        val draft = TextAttachment.Document(container.files.newDraftFile("txt").apply { writeText(long) }, "Roman")
+        assertTrue(library.isShortened(draft))
+        val id = library.add(draft, "Roman", move = true)
+        val text = library.attachmentOf(library.get(id)!!) as TextAttachment.Document
+        val layout = TextLayout(DocumentText.read(text.file, text.kind))
+        val lastShown = layout.sentences(layout.blockStarts.size - 1).last()
+        library.setProgress(id, TextProgress.after(layout, lastShown))
+        assertNull("bleibt unter „Zu lesen“", library.get(id)!!.finishedAt)
+    }
+
+    @Test
+    fun orphanedLibraryFilesAreCleanedButUsedOnesStay() = runBlocking {
+        val id = addStory()
+        val used = library.attachmentOf(library.get(id)!!)!!.files.single()
+        val orphan = java.io.File(container.files.libraryDir, "verwaist.jpg").apply {
+            writeBytes(byteArrayOf(1))
+            setLastModified(System.currentTimeMillis() - 2 * 60 * 60 * 1000)
+        }
+        val fresh = java.io.File(container.files.libraryDir, "gerade_abgelegt.jpg").apply { writeBytes(byteArrayOf(2)) }
+        library.cleanOrphans()
+        assertFalse(orphan.exists())
+        assertTrue("gerade Abgelegtes bleibt", fresh.exists())
+        assertTrue(used.exists())
+        assertTrue(fresh.delete())
+    }
 }

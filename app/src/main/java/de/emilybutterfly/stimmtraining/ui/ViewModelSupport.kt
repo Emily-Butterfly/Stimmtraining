@@ -86,9 +86,10 @@ suspend fun FileStore.importDraftPhoto(context: Context, source: Uri): File = cr
 
 /**
  * Übernimmt mehrere Bilder aus der Galerie als Entwürfe, in der gewählten Reihenfolge. Bilder,
- * die sich nicht lesen lassen, fehlen im Ergebnis; ließ sich gar keins lesen, kommt der Fehler.
+ * die sich nicht lesen lassen, fehlen im Ergebnis und werden mit [onSkipped] gemeldet; ließ sich
+ * gar keins lesen, kommt der Fehler.
  */
-suspend fun FileStore.importDraftPhotos(context: Context, sources: List<Uri>): List<File> {
+suspend fun FileStore.importDraftPhotos(context: Context, sources: List<Uri>, onSkipped: (Int) -> Unit = {}): List<File> {
     val imported = mutableListOf<File>()
     var failure: Exception? = null
     try {
@@ -106,8 +107,13 @@ suspend fun FileStore.importDraftPhotos(context: Context, sources: List<Uri>): L
         throw e
     }
     if (imported.isEmpty()) failure?.let { throw it }
+    if (imported.size < sources.size) onSkipped(sources.size - imported.size)
     return imported
 }
+
+/** Meldung, wenn einzelne Bilder (z. B. HEIC auf älteren Handys) nicht übernommen werden konnten. */
+fun skippedPhotosMessage(count: Int): String =
+    if (count == 1) "1 Bild ließ sich nicht übernehmen." else "$count Bilder ließen sich nicht übernehmen."
 
 /** Übernimmt das zuletzt mit der Kamera aufgenommene Foto als Entwurf. */
 suspend fun FileStore.importCameraCapture(context: Context): File {

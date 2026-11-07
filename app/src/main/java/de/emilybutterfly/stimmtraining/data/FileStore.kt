@@ -18,6 +18,9 @@ class FileStore(private val context: Context) {
     /** Nicht im Cache: Android darf den Cache leeren, bevor eine Aufnahme gespeichert ist. */
     private val draftDir: File get() = File(context.filesDir, "drafts").apply { mkdirs() }
 
+    /** Hier wird eine Sicherung beim Einlesen ausgepackt. */
+    val importStagingDir: File get() = File(context.filesDir, "import-staging")
+
     fun audio(name: String) = File(audioDir, name)
     fun photo(name: String) = File(photoDir, name)
     fun document(name: String) = File(documentDir, name)
@@ -38,6 +41,8 @@ class FileStore(private val context: Context) {
     fun cleanOldDrafts() {
         val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
         draftDir.listFiles()?.filter { it.lastModified() < cutoff }?.forEach { it.deleteRecursively() }
+        // Reste eines abgebrochenen Einlesens (z. B. App beendet); ein laufendes ist nie so alt.
+        importStagingDir.takeIf { it.lastModified() < System.currentTimeMillis() - 60L * 60 * 1000 }?.deleteRecursively()
     }
 
     fun totalBytes(): Long =

@@ -35,7 +35,8 @@ object BackupFormat {
     const val LIBRARY_DIR = "library/"
 
     private val SAFE_FILE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
-    private val SAFE_UUID = Regex("[A-Za-z0-9-]{8,64}")
+    // Beginnt wie ein sicherer Dateiname, denn die App benennt Dateien nach der UUID.
+    private val SAFE_UUID = Regex("[A-Za-z0-9][A-Za-z0-9-]{7,63}")
 
     /** Eine Aufnahme aus dem Manifest; Dateinamen sind relativ zu audio/, photos/ bzw. documents/. */
     data class Entry(val recording: Recording)
@@ -119,6 +120,7 @@ object BackupFormat {
                 .mapNotNull(::safeEntryName)
                 .filter { it.startsWith(LIBRARY_DIR) }
                 .map { it.removePrefix(LIBRARY_DIR) }
+                .distinct()
                 .take(TextAttachment.MAX_PAGES)
         }.orEmpty()
         val document = o.stringOrNull("document")?.let(::safeEntryName)?.takeIf { it.startsWith(LIBRARY_DIR) }?.removePrefix(LIBRARY_DIR)
@@ -136,7 +138,7 @@ object BackupFormat {
             documentName = documentKind?.let { kind -> o.stringOrNull("documentName")?.let(::cleanDisplayName) ?: "Text.${kind.extension}" },
             pinned = o.optBoolean("pinned", false),
             createdAt = createdAt,
-            updatedAt = o.optLong("updatedAt", createdAt),
+            updatedAt = notInFuture(o.optLong("updatedAt", createdAt)),
             finishedAt = o.longOrNull("finishedAt"),
             lastReadAt = o.longOrNull("lastReadAt"),
         )
@@ -156,10 +158,19 @@ object BackupFormat {
         return LibraryEntry(base.withProgress(progress, fraction))
     }
 
+    /**
+     * Zeitstempel aus der Zukunft (z. B. von einem Handy mit falsch gestellter Uhr) würden die
+     * Änderungserkennung des automatischen Backups dauerhaft blind machen.
+     */
+    private fun notInFuture(millis: Long): Long = millis.coerceIn(0L, System.currentTimeMillis())
+
     private fun parseRoot(json: String): JSONObject {
         val root = try {
             JSONObject(json)
         } catch (_: JSONException) {
+            throw BackupException("Die Sicherung ist beschädigt (manifest.json nicht lesbar).")
+        } catch (_: StackOverflowError) {
+            // org.json liest verschachtelte Listen rekursiv; tausendfach verschachtelt sprengt das den Stapel.
             throw BackupException("Die Sicherung ist beschädigt (manifest.json nicht lesbar).")
         }
         if (root.optString("format") != FORMAT) {
@@ -188,6 +199,7 @@ object BackupFormat {
             .mapNotNull(::safeEntryName)
             .filter { it.startsWith(PHOTO_DIR) }
             .map { it.removePrefix(PHOTO_DIR) }
+            .distinct()
             .take(TextAttachment.MAX_PAGES)
         val section = o.optJSONObject("section")
         val document = o.stringOrNull("document")?.let(::safeEntryName)
@@ -207,14 +219,14 @@ object BackupFormat {
             documentName = documentKind?.let { kind ->
                 o.stringOrNull("documentName")?.let(::cleanDisplayName) ?: "Text.${kind.extension}"
             },
-            title = o.stringOrNull("title").orEmpty(),
-            exercise = o.stringOrNull("exercise").orEmpty(),
+            title = Recording.cleanText(o.stringOrNull("title").orEmpty(), Recording.MAX_TITLE),
+            exercise = Recording.cleanText(o.stringOrNull("exercise").orEmpty(), Recording.MAX_EXERCISE),
             warmedUp = o.optBoolean("warmedUp", false),
             warmUpMinutes = o.intOrNull("warmUpMinutes"),
             voiceCondition = o.intOrNull("voiceCondition")?.takeIf { it in 1..5 },
             selfRating = o.intOrNull("selfRating")?.takeIf { it in 1..5 },
-            notes = o.stringOrNull("notes").orEmpty(),
-            updatedAt = o.optLong("updatedAt", 0L),
+            notes = Recording.cleanText(o.stringOrNull("notes").orEmpty(), Recording.MAX_NOTES),
+            updatedAt = notInFuture(o.optLong("updatedAt", 0L)),
         ).withPitch(o.optJSONObject("pitch"))
         return Entry(recording)
     }

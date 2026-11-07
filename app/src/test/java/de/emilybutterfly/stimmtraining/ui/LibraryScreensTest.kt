@@ -271,7 +271,9 @@ class LibraryScreensTest {
         compose.onNode(hasText("Vierter Satz. Fünfter Satz.") and hasAnyAncestor(isDialog())).performTouchInput { click(centerRight.copy(x = right - 2f)) }
         screenshot("bibliothek_stelle_aendern")
         text("Übernehmen").performClick()
-        compose.waitUntil(5_000) { runBlocking { library.get(id)!!.progress } == ReadingPosition.InText(69, "Fünfter Satz.") }
+        // Der letzte Satz ist das Ende: Der Text gilt damit als gelesen und wandert nach „Gelesen“.
+        compose.waitUntil(5_000) { runBlocking { library.get(id)!!.finishedAt } != null }
+        assertEquals(null, runBlocking { library.get(id)!!.progress })
     }
 
     @Test
@@ -326,8 +328,8 @@ class LibraryScreensTest {
             }
         }
         waitForText("Aus der Bibliothek")
-        // Ab Seite 2: zwei der drei Seiten sind noch zu lesen.
-        waitForText("1 / 2")
+        // Weiter auf Seite 2 von 3; die erste ist ausgeblendet, gezählt wird trotzdem ab dem Anfang.
+        waitForText("2 / 3")
         screenshot("aufnahme_fotoseiten_weiterlesen")
     }
 
