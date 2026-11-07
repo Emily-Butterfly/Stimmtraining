@@ -26,6 +26,9 @@ internal object RtfReader {
     /** Formatvorlagennamen sind kurz; mehr wird nicht gesammelt. */
     private const val MAX_STYLE_NAME = 256
 
+    /** Mehr Schriften und Vorlagen hat kein echtes Dokument; die Tabellen sollen nicht beliebig wachsen. */
+    private const val MAX_TABLE_ENTRIES = 1_024
+
     private val SKIPPED = setOf(
         "colortbl", "info", "pict", "object", "header", "headerl", "headerr", "headerf", "footer", "footerl",
         "footerr", "footerf", "footnote", "fldinst", "listtable", "listoverridetable", "revtbl", "rsidtbl",
@@ -192,7 +195,7 @@ internal object RtfReader {
                     if (pending.size() >= maxPendingBytes) flushPart()
                 }
                 Destination.StyleSheet -> if (c == ';'.code) {
-                    styleNames[state.entry] = styleName.toString().trim()
+                    if (styleNames.size < MAX_TABLE_ENTRIES || state.entry in styleNames) styleNames[state.entry] = styleName.toString().trim()
                     styleName.setLength(0)
                 } else if (styleName.length < MAX_STYLE_NAME) {
                     styleName.append(c.toChar())
@@ -277,11 +280,15 @@ internal object RtfReader {
             when (destination) {
                 Destination.FontTable -> when (word) {
                     "f" -> state.entry = parameter ?: 0
-                    "fcharset" -> fontCharsets[state.entry] = parameter ?: 0
+                    "fcharset" -> if (fontCharsets.size < MAX_TABLE_ENTRIES || state.entry in fontCharsets) {
+                        fontCharsets[state.entry] = parameter ?: 0
+                    }
                 }
                 Destination.StyleSheet -> when (word) {
                     "s" -> state.entry = parameter ?: 0
-                    "outlinelevel" -> styleOutlines[state.entry] = parameter ?: -1
+                    "outlinelevel" -> if (styleOutlines.size < MAX_TABLE_ENTRIES || state.entry in styleOutlines) {
+                        styleOutlines[state.entry] = parameter ?: -1
+                    }
                 }
                 else -> body(word, parameter)
             }
@@ -311,7 +318,7 @@ internal object RtfReader {
                 }
                 "f" -> state.font = parameter ?: defaultFont
                 "deff" -> defaultFont = parameter ?: 0
-                "ansicpg" -> parameter?.let(::codepage)?.let { charset = it }
+                "ansicpg" -> parameter?.let(::cachedCodepage)?.let { charset = it }
                 "mac" -> codepage(10000)?.let { charset = it }
                 "pc" -> codepage(437)?.let { charset = it }
                 "pca" -> codepage(850)?.let { charset = it }
@@ -362,8 +369,12 @@ internal object RtfReader {
 
         private fun fontCharset(font: Int): Charset? {
             val number = FONT_CHARSETS[fontCharsets[font] ?: return null] ?: return null
-            return charsets.getOrPut(number) { codepage(number) }
+            return cachedCodepage(number)
         }
+
+        /** Auch „gibt es nicht“ wird gemerkt: Jede vergebliche Suche wirft intern Ausnahmen und ist teuer. */
+        private fun cachedCodepage(number: Int): Charset? =
+            if (charsets.containsKey(number)) charsets[number] else codepage(number).also { charsets[number] = it }
 
         private fun endParagraph() {
             val named = StyleNames.blockStyle(styleNames[paragraphStyle])

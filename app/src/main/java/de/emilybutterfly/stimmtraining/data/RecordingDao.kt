@@ -27,8 +27,11 @@ interface RecordingDao {
     @Query("SELECT COUNT(*) FROM recordings")
     suspend fun count(): Int
 
-    /** Ändert sich bei jedem Hinzufügen, Bearbeiten oder Löschen einer Aufnahme. */
-    @Query("SELECT COUNT(*) || ':' || IFNULL(MAX(updatedAt), 0) || ':' || IFNULL(SUM(id), 0) FROM recordings")
+    /**
+     * Ändert sich bei jedem Hinzufügen, Bearbeiten oder Löschen. Die Summe der Änderungszeiten statt
+     * des neuesten Werts: Ein Zeitstempel aus der Zukunft (falsche Uhr) würde sonst alles Spätere verdecken.
+     */
+    @Query("SELECT COUNT(*) || ':' || TOTAL(updatedAt) || ':' || IFNULL(SUM(id), 0) FROM recordings")
     suspend fun fingerprint(): String
 
     @Query(

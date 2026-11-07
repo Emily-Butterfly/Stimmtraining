@@ -158,7 +158,7 @@ fun BackupScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
 
-                    val folderName = remember(auto.folderUri) { auto.folderUri?.let(viewModel::folderName) }
+                    val folderName by viewModel.folderName.collectAsStateWithLifecycle()
                     Row {
                         Icon(Icons.Outlined.Folder, contentDescription = null)
                         Spacer(Modifier.width(8.dp))

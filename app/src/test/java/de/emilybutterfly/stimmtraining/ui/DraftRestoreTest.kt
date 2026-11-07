@@ -244,13 +244,13 @@ class DraftRestoreTest {
         val viewModel = RecordViewModel(app, app.container, handle)
         assertEquals(PitchResult(57, 52, 62, 12_000), viewModel.state.value.pitch)
 
-        var savedId: Long? = null
-        viewModel.save { savedId = it }
+        viewModel.save()
         val deadline = System.currentTimeMillis() + 5_000
-        while (savedId == null && System.currentTimeMillis() < deadline) {
+        while (viewModel.state.value.savedId == null && System.currentTimeMillis() < deadline) {
             shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(10)
         }
+        val savedId = viewModel.state.value.savedId
         val saved = runBlocking { app.container.repository.observe(savedId!!).first() }!!
         assertEquals(57, saved.pitchMostFrequent)
         assertEquals(52, saved.pitchLowest)
@@ -298,6 +298,16 @@ class DraftRestoreTest {
         assertTrue("sanfte Fassung", viewModel.guide.value!!.exercise.steps.none { "Tonhöhen-App" in it || "Hz" in it })
         assertEquals("Übung im Formular bleibt", label, viewModel.state.value.params.exercise)
         app.container.settings.setGentleMode(false)
+    }
+
+    @Test
+    fun aSaveThatFinishedJustBeforeAndroidEndedTheAppStillLeadsToTheRecording() {
+        val handle = SavedStateHandle()
+        handle[RecordViewModel.KEY_SAVED_ID] = 42L
+        val restored = RecordViewModel(app, app.container, handle).state.value
+        assertEquals(42L, restored.savedId)
+        assertTrue("nichts mehr antippbar", restored.saving)
+        assertFalse("kein Entwurf mehr", restored.hasDraft && restored.audio != null)
     }
 
     @Test

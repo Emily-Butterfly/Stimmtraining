@@ -52,6 +52,9 @@ class TextDocumentBuilder(private val maxChars: Int = DEFAULT_MAX_CHARS) {
      */
     internal val currentBlockLength: Int get() = blockChars
 
+    /** So viele Zeichen werden noch aufgenommen. */
+    internal val remaining: Int get() = maxChars - chars
+
     /** true, sobald die Höchstmenge erreicht ist; Leser können dann aufhören. */
     var isFull: Boolean = false
         private set
@@ -63,9 +66,11 @@ class TextDocumentBuilder(private val maxChars: Int = DEFAULT_MAX_CHARS) {
         currentItalic = italic
         val remaining = maxChars - chars
         if (text.length >= remaining) {
-            current.append(text, 0, remaining)
+            // Nie ein Emoji (Ersatzzeichenpaar) halbieren.
+            val cut = if (remaining > 0 && text[remaining - 1].isHighSurrogate()) remaining - 1 else remaining
+            current.append(text, 0, cut)
             chars = maxChars
-            blockChars += remaining
+            blockChars += cut
             isFull = true
         } else {
             current.append(text)

@@ -107,16 +107,28 @@ object BackupFormat {
         )
         .put("progressFraction", t.progressFraction?.toDouble() ?: JSONObject.NULL)
 
-    /** Die Texte der Bibliothek aus einer Sicherung (ältere Sicherungen haben keine). */
-    fun parseLibrary(json: String): List<LibraryEntry> {
+    /** Aufnahmen und Bibliothek einer Sicherung, in einem Durchgang gelesen. */
+    class Parsed(val recordings: List<Entry>, val library: List<LibraryEntry>)
+
+    fun parseAll(json: String): Parsed {
         val root = parseRoot(json)
-        val list = root.optJSONArray("library") ?: return emptyList()
-        return (0 until list.length()).mapNotNull { i -> list.optJSONObject(i)?.let(::parseLibraryEntry) }
+        return Parsed(recordings(root), library(root))
     }
+
+    /** Die Texte der Bibliothek aus einer Sicherung (ältere Sicherungen haben keine). */
+    fun parseLibrary(json: String): List<LibraryEntry> = library(parseRoot(json))
+
+    private fun library(root: JSONObject): List<LibraryEntry> {
+        val list = root.optJSONArray("library") ?: return emptyList()
+        return (0 until minOf(list.length(), MAX_ITEMS)).mapNotNull { i -> list.optJSONObject(i)?.let(::parseLibraryEntry) }
+    }
+
+    /** Die Zeichenketten einer Liste, höchstens [max] Einträge – mehr liest eine echte Sicherung nie. */
+    private fun JSONArray.strings(max: Int): List<String> = (0 until minOf(length(), max)).mapNotNull { opt(it) as? String }
 
     private fun parseLibraryEntry(o: JSONObject): LibraryEntry? {
         val photos = o.optJSONArray("photos")?.let { array ->
-            (0 until array.length()).mapNotNull { array.optString(it, null) }
+            array.strings(MAX_LIST)
                 .mapNotNull(::safeEntryName)
                 .filter { it.startsWith(LIBRARY_DIR) }
                 .map { it.removePrefix(LIBRARY_DIR) }
@@ -127,8 +139,8 @@ object BackupFormat {
         val documentKind = document?.let { DocumentKind.fromExtension(it.substringAfterLast('.', "")) }
         if (photos.isEmpty() && documentKind == null) return null
         val uuid = o.stringOrNull("uuid")?.takeIf { SAFE_UUID.matches(it) } ?: UUID.randomUUID().toString()
-        val tags = o.optJSONArray("tags")?.let { array -> (0 until array.length()).mapNotNull { array.optString(it, null) } }.orEmpty()
-        val createdAt = o.optLong("createdAt", 0L)
+        val tags = o.optJSONArray("tags")?.strings(MAX_LIST).orEmpty()
+        val createdAt = notInFuture(o.optLong("createdAt", 0L))
         val base = LibraryText(
             uuid = uuid,
             title = LibraryRepository.cleanTitle(o.stringOrNull("title")?.let(::cleanDisplayName).orEmpty()),
@@ -139,8 +151,8 @@ object BackupFormat {
             pinned = o.optBoolean("pinned", false),
             createdAt = createdAt,
             updatedAt = notInFuture(o.optLong("updatedAt", createdAt)),
-            finishedAt = o.longOrNull("finishedAt"),
-            lastReadAt = o.longOrNull("lastReadAt"),
+            finishedAt = o.longOrNull("finishedAt")?.let(::notInFuture),
+            lastReadAt = o.longOrNull("lastReadAt")?.let(::notInFuture),
         )
         val fraction = o.doubleOrNull("progressFraction")?.toFloat()?.takeIf { it in 0f..1f }
         val progress = o.optJSONObject("progress")?.takeIf { base.finishedAt == null }?.let { p ->
@@ -182,10 +194,11 @@ object BackupFormat {
         return root
     }
 
-    fun parse(json: String): List<Entry> {
-        val root = parseRoot(json)
+    fun parse(json: String): List<Entry> = recordings(parseRoot(json))
+
+    private fun recordings(root: JSONObject): List<Entry> {
         val list = root.optJSONArray("recordings") ?: JSONArray()
-        return (0 until list.length()).mapNotNull { i -> list.optJSONObject(i)?.let(::parseEntry) }
+        return (0 until minOf(list.length(), MAX_ITEMS)).mapNotNull { i -> list.optJSONObject(i)?.let(::parseEntry) }
     }
 
     private fun parseEntry(o: JSONObject): Entry? {
@@ -193,7 +206,7 @@ object BackupFormat {
             ?: return null
         // Seit Version 3 eine Liste von Seiten, davor genau ein Foto.
         val photos = (
-            o.optJSONArray("photos")?.let { array -> (0 until array.length()).mapNotNull { array.optString(it, null) } }
+            o.optJSONArray("photos")?.strings(MAX_LIST)
                 ?: listOfNotNull(o.stringOrNull("photo"))
             )
             .mapNotNull(::safeEntryName)
@@ -209,8 +222,9 @@ object BackupFormat {
         val uuid = o.stringOrNull("uuid")?.takeIf { SAFE_UUID.matches(it) } ?: UUID.randomUUID().toString()
         val recording = Recording(
             uuid = uuid,
-            recordedAt = o.optLong("recordedAt", 0L),
-            durationMs = o.optLong("durationMs", 0L),
+            // Unsinnige Werte nicht übernehmen: Sortierung und Anzeige gerieten sonst durcheinander.
+            recordedAt = o.optLong("recordedAt", 0L).coerceIn(0L, System.currentTimeMillis() + MAX_FUTURE_MS),
+            durationMs = o.optLong("durationMs", 0L).coerceIn(0L, MAX_DURATION_MS),
             audioFile = audio.removePrefix(AUDIO_DIR),
             photoFile = photos.joinPageNames(),
             documentFile = document?.takeIf { documentKind != null },
@@ -273,8 +287,8 @@ object BackupFormat {
     private fun cleanDisplayName(raw: String): String? =
         raw.replace(Regex("\\p{Cntrl}"), "").trim().take(200).ifBlank { null }
 
-    private fun JSONObject.stringOrNull(name: String): String? =
-        if (isNull(name)) null else optString(name)
+    /** Nur echte Zeichenketten: optString würde Listen und Objekte in Text umwandeln, verschachtelt sogar rekursiv. */
+    private fun JSONObject.stringOrNull(name: String): String? = opt(name) as? String
 
     private fun JSONObject.intOrNull(name: String): Int? =
         if (isNull(name)) null else optInt(name, Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
@@ -286,5 +300,11 @@ object BackupFormat {
         if (isNull(name)) null else optDouble(name, Double.NaN).takeIf { !it.isNaN() }
 
     private const val MAX_TAGS = 30
+
+    /** Mehr Aufnahmen bzw. Texte und mehr Listeneinträge (Seiten, Schlagworte) liest eine echte Sicherung nie. */
+    private const val MAX_ITEMS = 100_000
+    private const val MAX_LIST = 200
+    private const val MAX_FUTURE_MS = 366L * 24 * 60 * 60 * 1000
+    private const val MAX_DURATION_MS = 48L * 60 * 60 * 1000
     private const val MAX_ANCHOR = 300
 }

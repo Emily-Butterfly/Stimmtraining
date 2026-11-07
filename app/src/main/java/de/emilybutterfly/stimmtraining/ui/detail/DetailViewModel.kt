@@ -107,7 +107,7 @@ class DetailViewModel(
 
     private fun restoreEdit(): EditState? {
         if (savedState.get<Boolean>(KEY_EDITING) != true) return null
-        val drafts = savedState.get<String>(KEY_ATTACHMENT_DRAFT).pageNames().map(::File).filter { it.isFile }
+        val drafts = savedState.get<String>(KEY_ATTACHMENT_DRAFT).pageNames().mapNotNull(container.files::ownDraft)
         val name = savedState.get<String>(KEY_ATTACHMENT_NAME)
         val change = when (savedState.get<String>(KEY_ATTACHMENT_MODE)) {
             "remove" -> AttachmentChange.Remove
@@ -392,11 +392,16 @@ class DetailViewModel(
         }
     }
 
-    fun delete(onDeleted: () -> Unit) {
+    /** Danach meldet [load] „gibt es nicht mehr“, und die Ansicht schließt sich. */
+    fun delete() {
         val recording = current ?: return
         viewModelScope.launch {
-            withContext(NonCancellable) { container.repository.delete(recording) }
-            onDeleted()
+            try {
+                withContext(NonCancellable) { container.repository.delete(recording) }
+            } catch (e: Exception) {
+                // Z. B. Speicher voll: Meldung statt Absturz.
+                _message.value = "Löschen fehlgeschlagen: ${e.message}"
+            }
         }
     }
 

@@ -14,6 +14,7 @@ import de.emilybutterfly.stimmtraining.AppContainer
 import de.emilybutterfly.stimmtraining.backup.AutoBackupInterval
 import de.emilybutterfly.stimmtraining.backup.AutoBackupScheduler
 import de.emilybutterfly.stimmtraining.backup.AutoBackupState
+import de.emilybutterfly.stimmtraining.backup.BackupActivity
 import de.emilybutterfly.stimmtraining.backup.BackupException
 import de.emilybutterfly.stimmtraining.ui.app
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +53,26 @@ class BackupViewModel(
         .map { infos -> infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    /** Name des gewählten Ordners; abgefragt im Hintergrund, denn manche Anbieter (USB, Cloud) brauchen lange. */
+    val folderName: StateFlow<String?> = settings.state
+        .map { state -> state.folderUri?.let { uri -> withContext(Dispatchers.IO) { folderName(uri) } } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     init {
+        // Läuft schon eine Sicherung (auch aus einem früheren Besuch dieser Ansicht), ist das hier zu sehen.
+        viewModelScope.launch {
+            container.backupManager.activity.collect { activity ->
+                _ui.update {
+                    it.copy(
+                        busyLabel = when (activity) {
+                            BackupActivity.Export -> "Sicherung wird erstellt …"
+                            BackupActivity.Import -> "Sicherung wird eingelesen …"
+                            null -> null
+                        },
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             container.repository.observeAll().collect { recordings ->
                 val bytes = withContext(Dispatchers.IO) { container.files.totalBytes() }
@@ -61,13 +81,13 @@ class BackupViewModel(
         }
     }
 
-    fun export(uri: Uri) = runOperation("Sicherung wird erstellt …") {
+    fun export(uri: Uri) = runOperation {
         val result = container.backupManager.exportTo(uri)
         val texts = if (result.texts == 1) "1 Text" else "${result.texts} Texte"
         "Sicherung gespeichert (${result.recordings} Aufnahmen, $texts der Bibliothek)."
     }
 
-    fun import(uri: Uri) = runOperation("Sicherung wird eingelesen …") {
+    fun import(uri: Uri) = runOperation {
         val result = container.backupManager.importFrom(uri)
         buildString {
             append(
@@ -86,9 +106,8 @@ class BackupViewModel(
         }
     }
 
-    private fun runOperation(label: String, block: suspend () -> String) {
-        if (_ui.value.busyLabel != null) return
-        _ui.update { it.copy(busyLabel = label) }
+    /** Den Fortschritt zeigt [BackupManager.activity]; hier kommt nur die Meldung am Ende. */
+    private fun runOperation(block: suspend () -> String) {
         viewModelScope.launch {
             val message = try {
                 // Nicht abbrechen, wenn die Ansicht verlassen wird – sonst bliebe eine halbe Datei zurück.
@@ -97,8 +116,10 @@ class BackupViewModel(
                 e.message ?: "Fehler beim Backup."
             } catch (e: Exception) {
                 "Fehler: ${e.message ?: e.javaClass.simpleName}"
+            } catch (_: OutOfMemoryError) {
+                "Die Sicherung ist zu groß für den Arbeitsspeicher."
             }
-            _ui.update { it.copy(busyLabel = null, message = message) }
+            _ui.update { it.copy(message = message) }
         }
     }
 
@@ -128,7 +149,7 @@ class BackupViewModel(
 
     fun backupNow() = AutoBackupScheduler.runNow(app)
 
-    fun folderName(uri: Uri): String =
+    private fun folderName(uri: Uri): String =
         runCatching { DocumentFile.fromTreeUri(app, uri)?.name }.getOrNull()
             ?: uri.lastPathSegment?.substringAfterLast(':')
             ?: uri.toString()

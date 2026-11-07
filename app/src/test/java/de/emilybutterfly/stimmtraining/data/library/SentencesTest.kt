@@ -48,8 +48,9 @@ class SentencesTest {
         // Groß- und Kleinschreibung der Abkürzung ist egal.
         assertEquals(listOf("VGL. Kapitel drei."), split("VGL. Kapitel drei."))
         assertEquals(listOf("Siehe St. Pauli, Nr. 5 und Abb. 3."), split("Siehe St. Pauli, Nr. 5 und Abb. 3."))
-        // Einzelne Buchstaben gelten immer als Abkürzung, auch „Plan B.“.
-        assertEquals(listOf("Das ist Plan B. Dann geht es los."), split("Das ist Plan B. Dann geht es los."))
+        // Einzelne Buchstaben gelten als Abkürzung – außer vor einem typischen Satzanfang wie „Dann“.
+        assertEquals(listOf("Siehe S. Neun Seiten weiter."), split("Siehe S. Neun Seiten weiter."))
+        assertEquals(listOf("Das ist Plan B.", "Dann geht es los."), split("Das ist Plan B. Dann geht es los."))
         // Ein unbekanntes Wort oder eine Maßangabe beendet den Satz.
         assertEquals(listOf("Er wohnt in der Goethestr.", "Dann zog er um."), split("Er wohnt in der Goethestr. Dann zog er um."))
         assertEquals(listOf("Er lief 100m.", "Dann war er müde."), split("Er lief 100m. Dann war er müde."))
@@ -139,5 +140,18 @@ class SentencesTest {
             // Halbe Emoji-Ersatzpaare am Rand sind hier egal: geprüft wird nur der Aufbau der Bereiche.
             assertWellFormed(text)
         }
+    }
+
+    @Test
+    fun apostrophesAndShortWordsBeforeASentenceStartDoNotMergeSentences() {
+        fun texts(input: String) = Sentences.ranges(input).map { input.substring(it.first, it.last + 1) }
+        assertEquals(listOf("Das war's.", "Jetzt gehen wir."), texts("Das war's. Jetzt gehen wir."))
+        assertEquals(listOf("Das war’s.", "Jetzt gehen wir."), texts("Das war’s. Jetzt gehen wir."))
+        assertEquals(listOf("Das ist Plan B.", "Er wartet."), texts("Das ist Plan B. Er wartet."))
+        assertEquals(listOf("Er zählte bis 10.", "Dann lief er los."), texts("Er zählte bis 10. Dann lief er los."))
+        assertEquals(listOf("Das Spiel endete 2:1.", "Alle jubelten."), texts("Das Spiel endete 2:1. Alle jubelten."))
+        // Unverändert ein Satz:
+        assertEquals(1, texts("Wir treffen Dr. Müller am 3. Oktober.").size)
+        assertEquals(1, texts("Das ist z. B. ein Beispiel.").size)
     }
 }

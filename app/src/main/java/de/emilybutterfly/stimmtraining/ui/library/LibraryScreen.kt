@@ -140,7 +140,8 @@ class LibraryViewModel(
     }
 
     fun togglePinned(text: LibraryText) {
-        viewModelScope.launch { repository.setPinned(text.id, !text.pinned) }
+        // Scheitert das (z. B. Speicher voll), bleibt die Nadel einfach, wie sie war.
+        viewModelScope.launch { runCatching { repository.setPinned(text.id, !text.pinned) } }
     }
 
     companion object {

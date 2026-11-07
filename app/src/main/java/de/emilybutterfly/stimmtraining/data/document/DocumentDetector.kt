@@ -71,7 +71,7 @@ object DocumentDetector {
                 },
             )
             isImage(head) -> throw UnsupportedDocumentException(IMAGE)
-            0.toByte() in head && !head.startsWith(0xFF, 0xFE) && !head.startsWith(0xFE, 0xFF) ->
+            0.toByte() in head && !head.startsWith(0xFF, 0xFE) && !head.startsWith(0xFE, 0xFF) && !head.startsWith(0x00, 0x00, 0xFE, 0xFF) ->
                 throw UnsupportedDocumentException(UNKNOWN)
             extension in HTML_EXTENSIONS || mime in HTML_MIME_TYPES -> DocumentKind.Html
             extension in MARKDOWN_EXTENSIONS || mime in MARKDOWN_MIME_TYPES -> DocumentKind.Markdown

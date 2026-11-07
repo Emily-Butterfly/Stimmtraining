@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.text.Normalizer
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -45,6 +46,11 @@ class LibraryRepository(
 
     /** Ändert sich bei jedem Hinzufügen, Bearbeiten oder Löschen eines Texts. */
     suspend fun fingerprint(): String = dao.fingerprint()
+
+    /** Baut den Suchindex aller Texte neu auf, z. B. nachdem sich [normalize] geändert hat. */
+    suspend fun rebuildSearch() = withContext(Dispatchers.IO) {
+        for (text in dao.getAll()) dao.upsertSearch(LibrarySearch(text.id, searchContent(text)))
+    }
 
     /** Nimmt einen Text aus einer Sicherung auf; seine Dateien liegen schon in der Bibliothek. */
     suspend fun insertImported(text: LibraryText): Long = withContext(Dispatchers.IO) {
@@ -93,18 +99,30 @@ class LibraryRepository(
     /** Titel, Schlagworte und angeheftet ändern. */
     suspend fun updateDetails(id: Long, title: String, tags: List<String>, pinned: Boolean) = withContext(Dispatchers.IO) {
         val current = dao.get(id) ?: return@withContext
-        val updated = current.copy(
-            title = cleanTitle(title),
-            tags = LibraryText.joinTags(tags),
-            pinned = pinned,
-            updatedAt = System.currentTimeMillis(),
-        )
-        dao.updateWithSearch(updated, searchContent(updated))
+        val updated = current.copy(title = cleanTitle(title), tags = LibraryText.joinTags(tags), pinned = pinned)
+        dao.setDetailsWithSearch(id, updated.title, updated.tags, pinned, System.currentTimeMillis(), searchContent(updated))
     }
 
     suspend fun setPinned(id: Long, pinned: Boolean) = withContext(Dispatchers.IO) {
-        val current = dao.get(id) ?: return@withContext
-        dao.update(current.copy(pinned = pinned, updatedAt = System.currentTimeMillis()))
+        dao.setPinned(id, pinned, System.currentTimeMillis())
+    }
+
+    /** Schreibt nur den Lesefortschritt; null mit [finishedAt] heißt „gelesen“, ohne heißt „von vorne“. */
+    private suspend fun writeProgress(id: Long, position: ReadingPosition?, fraction: Float?, finishedAt: Long?, lastReadAt: Long? = null) {
+        val text = (position as? ReadingPosition.InText)
+        val page = (position as? ReadingPosition.OnPage)
+        dao.setProgress(
+            id = id,
+            offset = text?.offset,
+            anchor = text?.anchor,
+            page = page?.page,
+            y = page?.y,
+            pageName = page?.pageName,
+            fraction = fraction?.takeIf { position != null }?.coerceIn(0f, 1f),
+            finishedAt = finishedAt,
+            lastReadAt = lastReadAt,
+            updatedAt = System.currentTimeMillis(),
+        )
     }
 
     /**
@@ -161,15 +179,14 @@ class LibraryRepository(
     /** Setzt die gelesene Stelle (z. B. von Hand korrigiert); null beginnt den Text von vorne. */
     suspend fun setProgress(id: Long, position: ReadingPosition?) = withContext(Dispatchers.IO) {
         val current = dao.get(id) ?: return@withContext
-        val now = System.currentTimeMillis()
+        // Das Messen liest den ganzen Text; geschrieben wird danach nur der Fortschritt.
         val measured = position?.let { measure(current, it) }
         // Bis zum letzten Satz bzw. Seitenende gesetzt: Dann ist der Text zu Ende gelesen.
-        val updated = if (measured?.atEnd == true) {
-            current.withProgress(null, null).copy(finishedAt = now)
+        if (measured?.atEnd == true) {
+            writeProgress(id, null, null, finishedAt = System.currentTimeMillis())
         } else {
-            current.withProgress(position, measured?.fraction).copy(finishedAt = null)
+            writeProgress(id, position, measured?.fraction, finishedAt = null)
         }
-        dao.update(updated.copy(updatedAt = now))
     }
 
     private class Measured(val fraction: Float?, val atEnd: Boolean)
@@ -196,8 +213,7 @@ class LibraryRepository(
 
     /** „Nochmal lesen“: zurück nach „Zu lesen“, von vorne. */
     suspend fun readAgain(id: Long) = withContext(Dispatchers.IO) {
-        val current = dao.get(id) ?: return@withContext
-        dao.update(current.withProgress(null, null).copy(finishedAt = null, updatedAt = System.currentTimeMillis()))
+        writeProgress(id, null, null, finishedAt = null)
     }
 
     /**
@@ -205,14 +221,12 @@ class LibraryRepository(
      * unter „Zu lesen“) oder mit [end] = null bis zum Ende (dann wandert er nach „Gelesen“).
      */
     suspend fun recordReading(id: Long, end: ReadingPosition?, fraction: Float?) = withContext(Dispatchers.IO) {
-        val current = dao.get(id) ?: return@withContext
         val now = System.currentTimeMillis()
-        val updated = if (end == null) {
-            current.withProgress(null, null).copy(finishedAt = now)
+        if (end == null) {
+            writeProgress(id, null, null, finishedAt = now, lastReadAt = now)
         } else {
-            current.withProgress(end, fraction).copy(finishedAt = null)
+            writeProgress(id, end, fraction, finishedAt = null, lastReadAt = now)
         }
-        dao.update(updated.copy(lastReadAt = now, updatedAt = now))
     }
 
     suspend fun delete(id: Long) = withContext(Dispatchers.IO) {
@@ -515,7 +529,22 @@ class LibraryRepository(
             return if ((attachment as? TextAttachment.Photo)?.pages?.size == 1) "Foto vom $day" else "Fotos vom $day"
         }
 
-        fun normalize(text: String): String = text.lowercase(Locale.GERMAN).replace(Regex("\\s+"), " ").trim()
+        /** Version von [normalize]; ändert sie sich, wird der Suchindex einmal neu aufgebaut. */
+        const val SEARCH_VERSION = 2
+
+        /**
+         * Für die Suche vereinheitlicht: klein, Umlaute zusammengesetzt (NFC), typografische
+         * Apostrophe und Anführungszeichen wie getippte, „ß“ wie „ss“, ohne weiche Trennstriche,
+         * jeder Leerraum (auch geschützte Leerzeichen) als ein Leerzeichen.
+         */
+        fun normalize(text: String): String = Normalizer.normalize(text, Normalizer.Form.NFC)
+            .lowercase(Locale.GERMAN)
+            .replace(Regex("[’‘‛`´]"), "'")
+            .replace(Regex("[„“”«»‚]"), "\"")
+            .replace("ß", "ss")
+            .replace(Regex("[\\u00AD\\u200B\\u200C\\u200D\\uFEFF]"), "")
+            .replace(Regex("[\\s\\u00A0\\u2007\\u202F]+"), " ")
+            .trim()
 
         fun cleanTitle(title: String): String =
             title.replace(Regex("\\s+"), " ").trim().take(MAX_TITLE).ifBlank { "Ohne Titel" }

@@ -29,8 +29,11 @@ interface LibraryDao {
     @Query("SELECT COUNT(*) FROM library_texts")
     suspend fun count(): Int
 
-    /** Ändert sich bei jedem Hinzufügen, Bearbeiten oder Löschen eines Texts. */
-    @Query("SELECT COUNT(*) || ':' || IFNULL(MAX(updatedAt), 0) || ':' || IFNULL(SUM(id), 0) FROM library_texts")
+    /**
+     * Ändert sich bei jedem Hinzufügen, Bearbeiten oder Löschen. Die Summe der Änderungszeiten statt
+     * des neuesten Werts: Ein Zeitstempel aus der Zukunft (falsche Uhr) würde sonst alles Spätere verdecken.
+     */
+    @Query("SELECT COUNT(*) || ':' || TOTAL(updatedAt) || ':' || IFNULL(SUM(id), 0) FROM library_texts")
     suspend fun fingerprint(): String
 
     /** Texte, deren Titel, Schlagworte oder Inhalt [query] enthalten ([query] in Kleinbuchstaben). */
@@ -39,6 +42,39 @@ interface LibraryDao {
 
     @Query("SELECT content FROM library_search WHERE textId = :id")
     suspend fun searchContent(id: Long): String?
+
+    // Gezielte Änderungen: Nur die betroffenen Spalten, damit sich gleichzeitige Änderungen
+    // (z. B. Anheften, während die gelesene Stelle gespeichert wird) nicht gegenseitig überschreiben.
+
+    @Query("UPDATE library_texts SET pinned = :pinned, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun setPinned(id: Long, pinned: Boolean, updatedAt: Long)
+
+    @Query("UPDATE library_texts SET title = :title, tags = :tags, pinned = :pinned, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun setDetails(id: Long, title: String, tags: String, pinned: Boolean, updatedAt: Long)
+
+    @Query(
+        "UPDATE library_texts SET progressOffset = :offset, progressAnchor = :anchor, progressPage = :page, progressY = :y, " +
+            "progressPageName = :pageName, progressFraction = :fraction, finishedAt = :finishedAt, " +
+            "lastReadAt = IFNULL(:lastReadAt, lastReadAt), updatedAt = :updatedAt WHERE id = :id",
+    )
+    suspend fun setProgress(
+        id: Long,
+        offset: Int?,
+        anchor: String?,
+        page: Int?,
+        y: Float?,
+        pageName: String?,
+        fraction: Float?,
+        finishedAt: Long?,
+        lastReadAt: Long?,
+        updatedAt: Long,
+    )
+
+    @Transaction
+    suspend fun setDetailsWithSearch(id: Long, title: String, tags: String, pinned: Boolean, updatedAt: Long, content: String) {
+        setDetails(id, title, tags, pinned, updatedAt)
+        upsertSearch(LibrarySearch(id, content))
+    }
 
     @Insert
     suspend fun insert(text: LibraryText): Long

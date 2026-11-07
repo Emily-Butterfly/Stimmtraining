@@ -4,6 +4,7 @@ import de.emilybutterfly.stimmtraining.data.document.StyleNames.isHeading
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.util.Locale
 import java.util.zip.ZipFile
@@ -15,6 +16,9 @@ import java.util.zip.ZipFile
  */
 internal object DocxReader {
     private const val DOCUMENT = "word/document.xml"
+
+    /** Längere Namen und IDs von Formatvorlagen gibt es in echten Dokumenten nicht; sie bremsen nur. */
+    private const val MAX_NAME = 256
     private val W = setOf(
         "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
         "http://purl.oclc.org/ooxml/wordprocessingml/main",
@@ -34,6 +38,8 @@ internal object DocxReader {
                     readStyles(input)
                 } catch (_: XmlPullParserException) {
                     emptyMap() // Ohne Formatvorlagen geht es auch, nur ungenauer.
+                } catch (_: IOException) {
+                    emptyMap() // Ebenso, wenn styles.xml zu groß oder beschädigt ist.
                 }
             }.orEmpty()
             val document = ZipParts.open(zip, mainPart(zip, maxBytes), maxBytes)
@@ -80,11 +86,11 @@ internal object DocxReader {
                     if (parser.namespace !in W) continue
                     val current = style
                     when (parser.name) {
-                        "style" -> style = parser.value("styleId")?.let { id -> Style().also { styles[id] = it } }
+                        "style" -> style = parser.name("styleId")?.let { id -> Style().also { styles[id] = it } }
                         // Bedingte Tabellenformate und Änderungen enthalten eigene Zeichenformate.
                         "tblStylePr", "pPrChange", "rPrChange", "docDefaults", "latentStyles" -> ZipParts.skip(parser)
-                        "name" -> current?.name = parser.value("val")
-                        "basedOn" -> current?.basedOn = parser.value("val")
+                        "name" -> current?.name = parser.name("val")
+                        "basedOn" -> current?.basedOn = parser.name("val")
                         "numId" -> current?.numbered = parser.value("val") != "0"
                         "ilvl" -> current?.level = parser.value("val")?.toIntOrNull()
                         "outlineLvl" -> current?.outline = parser.value("val")?.toIntOrNull()
@@ -179,7 +185,7 @@ internal object DocxReader {
                     XmlPullParser.END_DOCUMENT -> throw XmlPullParserException("Unerwartetes Ende")
                     XmlPullParser.END_TAG -> if (parser.depth == depth) return
                     XmlPullParser.START_TAG -> when (parser.name) {
-                        "pStyle" -> paragraph.styleId = parser.value("val")
+                        "pStyle" -> paragraph.styleId = parser.name("val")
                         "numId" -> paragraph.numId = parser.value("val")
                         "ilvl" -> paragraph.level = parser.value("val")?.toIntOrNull()
                         "outlineLvl" -> paragraph.outline = parser.value("val")?.toIntOrNull()
@@ -199,7 +205,7 @@ internal object DocxReader {
                     XmlPullParser.START_TAG -> when (parser.name) {
                         "b" -> paragraph.bold = parser.isOn()
                         "i" -> paragraph.italic = parser.isOn()
-                        "rStyle" -> paragraph.charStyle = parser.value("val")
+                        "rStyle" -> paragraph.charStyle = parser.name("val")
                         "vanish" -> paragraph.hidden = parser.isOn()
                         "rPrChange" -> ZipParts.skip(parser)
                     }
@@ -226,12 +232,16 @@ internal object DocxReader {
             paragraph.hasText = false
         }
 
-        private fun blockStyle(paragraph: Paragraph): Pair<BlockStyle, Int> {
-            paragraph.outline?.takeIf { it in 0..8 }?.let { return StyleNames.heading(it + 1) to 0 }
+        /** Was eine Absatzvorlage samt ihren Eltern vorgibt; je Vorlage nur einmal ermittelt. */
+        private class Resolved(val named: BlockStyle?, val numbered: Boolean?, val level: Int?)
+
+        private val resolved = HashMap<String, Resolved>()
+
+        private fun resolve(styleId: String): Resolved = resolved.getOrPut(styleId) {
             var named: BlockStyle? = null
-            var numbered = paragraph.numId?.let { it != "0" }
-            var level = paragraph.level
-            var id = paragraph.styleId
+            var numbered: Boolean? = null
+            var level: Int? = null
+            var id: String? = styleId
             var steps = 0
             while (id != null && steps++ < 16) {
                 val style = styles[id]
@@ -242,6 +252,16 @@ internal object DocxReader {
                 if (level == null) level = style?.level
                 id = style?.basedOn
             }
+            Resolved(named, numbered, level)
+        }
+
+        private fun blockStyle(paragraph: Paragraph): Pair<BlockStyle, Int> {
+            paragraph.outline?.takeIf { it in 0..8 }?.let { return StyleNames.heading(it + 1) to 0 }
+            val fromStyle = paragraph.styleId?.let(::resolve)
+            val named = fromStyle?.named
+            // Angaben am Absatz selbst gehen denen der Vorlage vor.
+            val numbered = paragraph.numId?.let { it != "0" } ?: fromStyle?.numbered
+            val level = paragraph.level ?: fromStyle?.level
             return when {
                 named != null && named.isHeading -> named to 0
                 numbered == true -> BlockStyle.ListItem to (level ?: 0)
@@ -261,14 +281,20 @@ internal object DocxReader {
             return null
         }
 
+        private val hintKeys = HashMap<String, String>()
+
         /** Ohne styles.xml: "Strong"/"Fett" bzw. "Emphasis"/"Hervorhebung" am Namen erkennen. */
         private fun charStyleHint(id: String?, english: String, german: String): Boolean {
-            val key = (styles[id]?.name ?: id)?.lowercase(Locale.ROOT) ?: return false
+            if (id == null) return false
+            val key = hintKeys.getOrPut(id) { (styles[id]?.name ?: id).lowercase(Locale.ROOT) }
             return key == english || key == german
         }
     }
 
     private fun XmlPullParser.value(name: String): String? = getAttributeValue(null, name)
+
+    /** Name oder ID einer Formatvorlage; unsinnig lange gelten als nicht vorhanden. */
+    private fun XmlPullParser.name(attribute: String): String? = value(attribute)?.takeIf { it.length <= MAX_NAME }
 
     /** `<w:b/>` ist an, `<w:b w:val="0"/>` (bzw. "false", "off") aus. */
     private fun XmlPullParser.isOn(): Boolean = value("val")?.lowercase(Locale.ROOT) !in setOf("0", "false", "off")

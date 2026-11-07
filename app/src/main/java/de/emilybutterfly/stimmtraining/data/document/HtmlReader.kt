@@ -8,6 +8,12 @@ import java.util.Locale
  * fett und kursiv. Leerraum wird wie im Browser zusammengefasst (außer in `<pre>`).
  */
 internal object HtmlReader {
+    /**
+     * Tiefer verschachtelte Elemente werden nicht mehr verfolgt. Sonst würde jedes schließende
+     * Tag über einen riesigen Stapel suchen – bei Millionen offener Tags quadratisch.
+     */
+    private const val MAX_DEPTH = 256
+
     fun read(html: String, builder: TextDocumentBuilder) = Walker(html, builder).run()
 
     private val BLOCKS = setOf(
@@ -212,6 +218,7 @@ internal object HtmlReader {
                 // Tabellenzellen einer Zeile durch ein Leerzeichen trennen.
                 name == "td" || name == "th" -> if (lineHasContent) pendingSpace = true
                 name in VOID || selfClosing -> Unit
+                inlines.size >= MAX_DEPTH -> Unit
                 else -> {
                     val style = attributes?.get("style").orEmpty()
                     val inline = Inline(name, name in BOLD || STYLE_BOLD.containsMatchIn(style), name in ITALIC || STYLE_ITALIC.containsMatchIn(style))
@@ -258,6 +265,7 @@ internal object HtmlReader {
                 }
                 in HEADINGS -> if (blocks.lastOrNull()?.tag in HEADINGS) popBlocks(blocks.lastIndex)
             }
+            if (blocks.size >= MAX_DEPTH) return
             val block = Block(name)
             when (name) {
                 "ol" -> block.counter = attributes?.get("start")?.trim()?.toIntOrNull() ?: 1

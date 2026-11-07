@@ -45,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -100,6 +101,12 @@ fun DetailScreen(
         }
     }
     // Während des Speichern nicht abbrechen: Die Entwürfe werden gerade übernommen.
+    // Gelöscht (hier oder anderswo): zurück. Mit dem Rückruf dieser Ansicht, auch nach dem Drehen.
+    val currentOnClose by rememberUpdatedState(onClose)
+    LaunchedEffect(load) {
+        if (load is DetailLoad.Missing) currentOnClose()
+    }
+
     BackHandler(enabled = edit != null) { if (edit?.saving != true) viewModel.cancelEdit() }
 
     val recording = (load as? DetailLoad.Ready)?.recording
@@ -223,7 +230,7 @@ fun DetailScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
-                    viewModel.delete(onDeleted = onClose)
+                    viewModel.delete()
                 }) { Text("Löschen") }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },

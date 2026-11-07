@@ -13,6 +13,19 @@ object Sentences {
     /** Anführungszeichen und Klammern, die hinter dem Satzzeichen noch zum Satz gehören. */
     private const val CLOSERS = "”“\"'»«›‹)]’‘"
 
+    /**
+     * Typische Satzanfänge: Folgt einer davon, endet der Satz auch nach einer Abkürzung oder Zahl
+     * („Plan B. Er ging“, „bis 10. Dann“) – „Dr. Müller“ oder „am 3. Oktober“ bleiben ein Satz.
+     */
+    private const val MAX_STARTER = 12
+
+    private val SENTENCE_STARTERS = setOf(
+        "er", "sie", "es", "ich", "wir", "ihr", "du", "man", "das", "der", "die", "dann", "und", "aber",
+        "danach", "doch", "da", "dort", "nun", "jetzt", "so", "auch", "als", "wenn", "ein", "eine", "kein",
+        "keine", "mein", "meine", "sein", "seine", "unser", "dieser", "diese", "dieses", "alle", "viele",
+        "wie", "was", "wer", "warum", "wo", "später", "zuerst", "plötzlich", "heute", "morgen", "gestern",
+    )
+
     /** Wörter, nach deren Punkt der Satz weitergeht (klein geschrieben, ohne Punkt). Einzelbuchstaben gelten immer. */
     private val ABBREVIATIONS = setOf(
         "bzw", "ca", "usw", "etc", "vgl", "ggf", "evtl", "inkl", "zzgl", "bspw", "insb", "sog",
@@ -72,7 +85,15 @@ object Sentences {
         // Abkürzungen und Ordnungszahlen gibt es nur mit einem einzelnen Punkt; mit Klammer oder
         // Anführungszeichen dahinter endet eher der Satz („… usw.“ Dann).
         val singlePeriod = terminatorsEnd - from == 1 && text[from] == '.' && end == terminatorsEnd
-        return !(singlePeriod && (isAbbreviation(text, from) || isOrdinal(text, from)))
+        if (!singlePeriod || startsSentence(text, next)) return true
+        return !(isAbbreviation(text, from) || isOrdinal(text, from))
+    }
+
+    /** Ob bei [index] ein typischer Satzanfang steht (siehe [SENTENCE_STARTERS]). */
+    private fun startsSentence(text: String, index: Int): Boolean {
+        var end = index
+        while (end < text.length && end - index <= MAX_STARTER && text[end].isLetter()) end++
+        return end > index && text.substring(index, end).lowercase(Locale.GERMAN) in SENTENCE_STARTERS
     }
 
     /** „z. B.“, „S. 5“, „Dr.“: ein bekanntes Wort oder ein einzelner Buchstabe vor dem Punkt bei [period]. */
@@ -83,6 +104,8 @@ object Sentences {
         if (length == 0 || length > MAX_ABBREVIATION) return false
         // „100m.“ ist keine Abkürzung, sondern eine Maßangabe am Satzende.
         if (start > 0 && text[start - 1].isLetterOrDigit()) return false
+        // „war's.“: Der Buchstabe nach dem Apostroph gehört zum Wort davor.
+        if (length == 1 && start > 0 && text[start - 1] in "'’") return false
         return length == 1 || text.substring(start, period).lowercase(Locale.ROOT) in ABBREVIATIONS
     }
 

@@ -47,6 +47,9 @@ internal object TextDecoding {
     fun decode(bytes: ByteArray, complete: Boolean = true, declared: Charset? = null): String {
         val text = when {
             bytes.startsWith(0xEF, 0xBB, 0xBF) -> String(bytes, 3, bytes.size - 3, Charsets.UTF_8)
+            // UTF-32 zuerst: Seine BOM beginnt wie die von UTF-16LE.
+            bytes.startsWith(0xFF, 0xFE, 0x00, 0x00) -> String(bytes, 4, bytes.size - 4, Charset.forName("UTF-32LE"))
+            bytes.startsWith(0x00, 0x00, 0xFE, 0xFF) -> String(bytes, 4, bytes.size - 4, Charset.forName("UTF-32BE"))
             bytes.startsWith(0xFF, 0xFE) -> String(bytes, 2, bytes.size - 2, Charsets.UTF_16LE)
             bytes.startsWith(0xFE, 0xFF) -> String(bytes, 2, bytes.size - 2, Charsets.UTF_16BE)
             declared != null && declared != Charsets.UTF_8 -> String(bytes, declared)

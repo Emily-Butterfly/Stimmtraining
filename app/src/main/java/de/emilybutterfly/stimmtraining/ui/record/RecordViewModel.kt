@@ -96,6 +96,11 @@ data class RecordUiState(
     val recordedAt: Long? = null,
     val durationMs: Long = 0,
     val saving: Boolean = false,
+    /**
+     * Gespeichert unter dieser ID: Die Ansicht wechselt dann zur Aufnahme. Als Zustand statt als
+     * Rückruf, damit es auch nach dem Drehen oder einem Neustart durch Android ankommt.
+     */
+    val savedId: Long? = null,
     val message: String? = null,
     /** Ausgangswerte des Formulars, z. B. mit vorausgefüllter Übung. */
     val initialParams: RecordingParams = RecordingParams(),
@@ -258,10 +263,12 @@ class RecordViewModel(
     }
 
     private fun restore(): RecordUiState {
+        // Schon gespeichert, nur der Wechsel zur Aufnahme fehlte noch (z. B. App währenddessen beendet).
+        savedState.get<Long>(KEY_SAVED_ID)?.let { return RecordUiState(savedId = it, saving = true) }
         val params = savedState.getParams(KEY_PARAMS)
         val initialParams = savedState.getParams(KEY_INITIAL_PARAMS)
         val attachment = restoreAttachment()
-        val audio = savedState.get<String>(KEY_AUDIO)?.let(::File)?.takeIf { it.isFile && it.length() > 0 }
+        val audio = container.files.ownDraft(savedState.get<String>(KEY_AUDIO))?.takeIf { it.length() > 0 }
             ?: return RecordUiState(params = params, attachment = attachment, initialParams = initialParams)
         val duration = savedState[KEY_DURATION] ?: 0L
         return RecordUiState(
@@ -280,10 +287,10 @@ class RecordViewModel(
     }
 
     private fun restoreAttachment(): TextAttachment? {
-        savedState.get<String>(KEY_DOCUMENT)?.let(::File)?.takeIf { it.isFile }?.let { file ->
+        container.files.ownDraft(savedState.get<String>(KEY_DOCUMENT))?.let { file ->
             return TextAttachment.Document(file, savedState.get<String>(KEY_DOCUMENT_NAME) ?: file.name)
         }
-        val pages = savedState.get<String>(KEY_PHOTO).pageNames().map(::File).filter { it.isFile }
+        val pages = savedState.get<String>(KEY_PHOTO).pageNames().mapNotNull(container.files::ownDraft)
         return if (pages.isEmpty()) null else TextAttachment.Photo(pages)
     }
 
@@ -701,7 +708,7 @@ class RecordViewModel(
         removeAttachment()
     }
 
-    fun save(onSaved: (Long) -> Unit) {
+    fun save() {
         val current = _state.value
         val audio = current.audio ?: return
         if (current.saving || current.attachmentBusy) return
@@ -752,7 +759,9 @@ class RecordViewModel(
                     }
                     id
                 }
-                onSaved(id)
+                // Sofort sichern: Endet die App jetzt, darf die Aufnahme nicht ein zweites Mal gespeichert werden.
+                savedState[KEY_SAVED_ID] = id
+                _state.update { it.copy(savedId = id) }
             } catch (e: Exception) {
                 _state.update { it.copy(saving = false, message = "Speichern fehlgeschlagen: ${e.message}") }
             }
@@ -815,6 +824,7 @@ class RecordViewModel(
         internal const val KEY_DOCUMENT = "document"
         internal const val KEY_DOCUMENT_NAME = "documentName"
         internal const val KEY_AUDIO = "audio"
+        internal const val KEY_SAVED_ID = "savedId"
         internal const val KEY_RECORDED_AT = "recordedAt"
         internal const val KEY_DURATION = "durationMs"
         internal const val KEY_PITCH_VOICED = "pitchVoicedMs"

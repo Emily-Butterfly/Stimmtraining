@@ -46,7 +46,10 @@ class PdfPages private constructor(
             width *= scale
             height *= scale
         }
-        return Size(width.toInt().coerceAtLeast(1), height.toInt().coerceAtLeast(1))
+        // Extrem schmale, lange Seiten: Die Breite bleibt mindestens 1, also auch die Höhe begrenzen.
+        val finalWidth = width.toInt().coerceAtLeast(1)
+        val finalHeight = height.toInt().coerceIn(1, minOf(MAX_SIDE_PX, (MAX_PIXELS / finalWidth).toInt().coerceAtLeast(1)))
+        return Size(finalWidth, finalHeight)
     }
 
     /** Rendert Seite [index] in etwa [widthPx] Pixel Breite, oder null, wenn schon geschlossen. */
@@ -83,6 +86,10 @@ class PdfPages private constructor(
 
     companion object {
         private const val MAX_WIDTH_PX = 2048
+        private const val MAX_SIDE_PX = 8192
+
+        /** Mehr Seiten zeigt die App nicht an; ein PDF mit Hunderttausenden Seiten bräuchte sonst ewig zum Öffnen. */
+        const val MAX_PAGES = 2_000
         private const val MAX_PIXELS = 4_000_000.0
         private val CACHE_BYTES = (Runtime.getRuntime().maxMemory() / 8).coerceIn(16L shl 20, 64L shl 20).toInt()
 
@@ -98,7 +105,7 @@ class PdfPages private constructor(
                     throw IOException("Das PDF ist beschädigt und lässt sich hier nicht anzeigen.")
                 }
                 try {
-                    val sizes = (0 until renderer.pageCount).map { i ->
+                    val sizes = (0 until minOf(renderer.pageCount, MAX_PAGES)).map { i ->
                         renderer.openPage(i).use { Size(it.width.coerceAtLeast(1), it.height.coerceAtLeast(1)) }
                     }
                     if (sizes.isEmpty()) throw IOException("Das PDF enthält keine Seiten.")

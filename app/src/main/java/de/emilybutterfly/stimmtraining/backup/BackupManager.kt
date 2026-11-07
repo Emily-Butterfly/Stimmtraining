@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import de.emilybutterfly.stimmtraining.BuildConfig
 import de.emilybutterfly.stimmtraining.data.FileStore
 import de.emilybutterfly.stimmtraining.data.Recording
@@ -14,6 +15,10 @@ import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import de.emilybutterfly.stimmtraining.data.library.ReadingPosition
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -22,6 +27,7 @@ import java.io.FileNotFoundException
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.UUID
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -33,6 +39,9 @@ data class ImportResult(val imported: Int, val skipped: Int, val incomplete: Int
 /** Was in eine Sicherung kam. */
 data class ExportResult(val recordings: Int, val texts: Int)
 
+/** Was gerade läuft. */
+enum class BackupActivity { Export, Import }
+
 /** Schreibt und liest Sicherungen aller Aufnahmen und der Bibliothek als ZIP-Datei (siehe [BackupFormat]). */
 class BackupManager(
     private val context: Context,
@@ -40,18 +49,51 @@ class BackupManager(
     private val library: LibraryRepository,
     private val files: FileStore,
 ) {
-    suspend fun exportTo(uri: Uri): ExportResult = withContext(Dispatchers.IO) {
+    /**
+     * Immer nur ein Vorgang zugleich: Zwei Importe würden sich ihre Dateien gegenseitig wegnehmen,
+     * ein Export während eines Imports hielte einen halben Stand fest. Der Zustand gilt für die
+     * ganze App, auch wenn die Backup-Ansicht inzwischen geschlossen wurde.
+     */
+    private val mutex = Mutex()
+    private val _activity = MutableStateFlow<BackupActivity?>(null)
+    val activity: StateFlow<BackupActivity?> = _activity.asStateFlow()
+
+    /** Mit [wait] wird gewartet (automatisches Backup), sonst kommt sofort eine Meldung. */
+    private suspend fun <T> exclusive(activity: BackupActivity, wait: Boolean, block: suspend () -> T): T {
+        if (wait) mutex.lock() else if (!mutex.tryLock()) throw BackupException(BUSY)
+        _activity.value = activity
         try {
-            openForWriting(context.contentResolver, uri).use { export(it) }
-        } catch (e: Exception) {
-            // Keine halbe Sicherung unter einem gültigen Namen zurücklassen.
-            runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
-            throw e
+            return block()
+        } finally {
+            _activity.value = null
+            mutex.unlock()
         }
     }
 
-    /** Schreibt die Sicherung nach [output] (ohne es zu schließen). */
-    suspend fun export(output: OutputStream): ExportResult = withContext(Dispatchers.IO) {
+    suspend fun exportTo(uri: Uri): ExportResult = exclusive(BackupActivity.Export, wait = false) {
+        withContext(Dispatchers.IO) {
+            // Eine schon vorhandene Sicherung würde beim Öffnen geleert und bei einem Fehler gelöscht.
+            if ((sizeOf(uri) ?: 0L) > 0L) throw BackupException(NOT_EMPTY)
+            try {
+                openForWriting(context.contentResolver, uri).use { exportUnlocked(it) }
+            } catch (e: Exception) {
+                // Keine halbe Sicherung unter einem gültigen Namen zurücklassen.
+                runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+                throw e
+            }
+        }
+    }
+
+    private fun sizeOf(uri: Uri): Long? = runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+        }
+    }.getOrNull()
+
+    /** Schreibt die Sicherung nach [output] (ohne es zu schließen); wartet, falls gerade eine andere läuft. */
+    suspend fun export(output: OutputStream): ExportResult = exclusive(BackupActivity.Export, wait = true) { exportUnlocked(output) }
+
+    private suspend fun exportUnlocked(output: OutputStream): ExportResult = withContext(Dispatchers.IO) {
         val recordings = dao.getAll()
         val texts = library.all()
         val zip = ZipOutputStream(BufferedOutputStream(output))
@@ -81,25 +123,32 @@ class BackupManager(
         zip.closeEntry()
     }
 
-    suspend fun importFrom(uri: Uri): ImportResult = withContext(Dispatchers.IO) {
-        val input = context.contentResolver.openInputStream(uri)
-            ?: throw IOException("Die Datei konnte nicht geöffnet werden.")
-        input.use { import(it) }
+    suspend fun importFrom(uri: Uri): ImportResult = exclusive(BackupActivity.Import, wait = false) {
+        withContext(Dispatchers.IO) {
+            val input = context.contentResolver.openInputStream(uri)
+                ?: throw IOException("Die Datei konnte nicht geöffnet werden.")
+            input.use { importUnlocked(it) }
+        }
     }
 
     /**
      * Übernimmt alle Aufnahmen aus der Sicherung, die es auf diesem Gerät noch nicht gibt.
      * Vorhandene Aufnahmen werden nie überschrieben oder gelöscht.
      */
-    suspend fun import(input: InputStream): ImportResult = withContext(Dispatchers.IO) {
+    suspend fun import(input: InputStream): ImportResult = exclusive(BackupActivity.Import, wait = true) { importUnlocked(input) }
+
+    /** Räumt Reste eines abgebrochenen Einlesens weg (z. B. weil die App beendet wurde) – nie ein laufendes. */
+    fun cleanStaleStaging() {
+        if (!mutex.isLocked) files.importStagingDir.deleteRecursively()
+    }
+
+    private suspend fun importUnlocked(input: InputStream): ImportResult = withContext(Dispatchers.IO) {
         // Nicht im Cache: Android darf ihn leeren, während noch eingelesen wird.
-        val staging = files.importStagingDir.apply {
-            deleteRecursively()
-            mkdirs()
-        }
+        val staging = File(files.importStagingDir, UUID.randomUUID().toString()).apply { mkdirs() }
         try {
             var manifest: String? = null
-            // Mehr als der freie Speicher (abzüglich der Reserve) wird nie ausgepackt, auch nicht bei einer „ZIP-Bombe“.
+            // Mehr als der freie Speicher (abzüglich der Reserve) wird nie ausgepackt, auch nicht bei einer
+            // „ZIP-Bombe“. Jede Datei belegt mindestens einen Block, auch wenn sie leer ist.
             var budget = files.freeBytes() - FileStore.RESERVE_BYTES
             var entries = 0
             val zip = ZipInputStream(BufferedInputStream(input))
@@ -112,17 +161,23 @@ class BackupManager(
                         manifest = readLimited(zip, MAX_MANIFEST_BYTES)?.toString(Charsets.UTF_8)
                             ?: throw BackupException("Die Sicherung ist beschädigt (manifest.json ist zu groß).")
                     } else {
+                        if (budget < BLOCK_BYTES) throw BackupException(NO_SPACE)
                         val target = File(staging, name)
                         target.parentFile?.mkdirs()
-                        budget -= copyLimited(zip, target, budget)
+                        budget -= maxOf(copyLimited(zip, target, budget), BLOCK_BYTES)
                     }
                 }
                 zip.closeEntry()
             }
 
             val json = manifest ?: throw BackupException("Diese Datei ist keine Stimmtraining-Sicherung (manifest.json fehlt).")
-            val recordings = BackupFormat.parse(json)
-            val libraryEntries = BackupFormat.parseLibrary(json)
+            val parsed = try {
+                BackupFormat.parseAll(json)
+            } catch (_: OutOfMemoryError) {
+                throw BackupException("Die Sicherung ist beschädigt (manifest.json lässt sich nicht lesen).")
+            }
+            val recordings = parsed.recordings
+            val libraryEntries = parsed.library
             val known = dao.allUuids().toMutableSet()
             var imported = 0
             var skipped = 0
@@ -148,14 +203,16 @@ class BackupManager(
     private suspend fun importRecording(recording: Recording, staging: File): Boolean {
         val audio = File(staging, BackupFormat.AUDIO_DIR + recording.audioFile)
         if (!audio.isFile) return false
+        val extension = audio.extension.lowercase().takeIf { it in AUDIO_EXTENSIONS } ?: "m4a"
+        val audioName = "${recording.uuid}.$extension"
+        // Nie eine vorhandene Datei überschreiben: Auf sie zeigt womöglich schon eine Aufnahme.
+        if (files.audio(audioName).exists()) return false
         val moved = mutableListOf<File>()
         fun move(source: File, target: File) {
             FileStore.move(source, target)
             moved += target
         }
         return try {
-            val extension = audio.extension.lowercase().takeIf { it in AUDIO_EXTENSIONS } ?: "m4a"
-            val audioName = "${recording.uuid}.$extension"
             move(audio, files.audio(audioName))
             val photoNames = recording.photoPages
                 .map { File(staging, BackupFormat.PHOTO_DIR + it) }
@@ -212,7 +269,7 @@ class BackupManager(
                 if (read < 0) break
                 total += read
                 if (total > budget) {
-                    throw BackupException("Nicht genug Speicherplatz, um die Sicherung einzulesen. Gib etwas Speicher frei und versuche es noch einmal.")
+                    throw BackupException(NO_SPACE)
                 }
                 output.write(buffer, 0, read)
             }
@@ -274,8 +331,14 @@ class BackupManager(
 
     companion object {
         /** Größer ist keine echte Sicherung: Selbst tausende Aufnahmen brauchen nur wenige MB Manifest. */
-        private const val MAX_MANIFEST_BYTES = 32 * 1024 * 1024
-        private const val MAX_ENTRIES = 100_000
+        private const val MAX_MANIFEST_BYTES = 8 * 1024 * 1024
+        private const val MAX_ENTRIES = 20_000
+        private const val BLOCK_BYTES = 4_096L
+        private const val BUSY = "Es läuft gerade schon eine Sicherung oder Wiederherstellung. Bitte warte, bis sie fertig ist."
+        private const val NOT_EMPTY =
+            "Diese Datei gibt es schon. Damit keine ältere Sicherung verloren geht, wähle bitte einen neuen Dateinamen."
+        private const val NO_SPACE =
+            "Nicht genug Speicherplatz, um die Sicherung einzulesen. Gib etwas Speicher frei und versuche es noch einmal."
         private val AUDIO_EXTENSIONS = setOf("m4a", "mp4", "aac", "3gp", "ogg", "opus", "mp3", "wav")
 
         /**

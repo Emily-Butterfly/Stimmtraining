@@ -29,6 +29,18 @@ class FileStore(private val context: Context) {
     fun newDraftFile(extension: String) = File(draftDir, "draft_${UUID.randomUUID()}.$extension")
 
     /**
+     * Ein gesicherter Pfad, aber nur, wenn er auf einen vorhandenen Entwurf der App zeigt. Was
+     * beim Wiederherstellen ankommt, darf nie auf andere Dateien (z. B. die Datenbank) zeigen –
+     * die würden sonst beim Verwerfen gelöscht oder beim Speichern verschoben.
+     */
+    fun ownDraft(path: String?): File? {
+        if (path.isNullOrBlank()) return null
+        val file = File(path)
+        val inside = runCatching { file.canonicalFile.parentFile == draftDir.canonicalFile }.getOrDefault(false)
+        return file.takeIf { inside && it.isFile }
+    }
+
+    /**
      * Fester Pfad für Kamerafotos. Fest, damit das Ergebnis auch dann noch gefunden wird,
      * wenn Android die App beendet, während die Kamera-App offen ist.
      */
@@ -41,8 +53,6 @@ class FileStore(private val context: Context) {
     fun cleanOldDrafts() {
         val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
         draftDir.listFiles()?.filter { it.lastModified() < cutoff }?.forEach { it.deleteRecursively() }
-        // Reste eines abgebrochenen Einlesens (z. B. App beendet); ein laufendes ist nie so alt.
-        importStagingDir.takeIf { it.lastModified() < System.currentTimeMillis() - 60L * 60 * 1000 }?.deleteRecursively()
     }
 
     fun totalBytes(): Long =
@@ -82,6 +92,9 @@ class FileStore(private val context: Context) {
         /** Ab hier warnt die App vor dem Aufnehmen. */
         const val LOW_STORAGE_BYTES = 50L * 1024 * 1024
 
+        /** Platz für die Endung bleibt bis zur Grenze von 255 Bytes. */
+        private const val MAX_NAME_BYTES = 200
+
         /** AAC mit 128 kbit/s: knapp 1 MB pro Minute. */
         const val AUDIO_BYTES_PER_MINUTE = 128_000L / 8 * 60
 
@@ -89,7 +102,13 @@ class FileStore(private val context: Context) {
         fun move(source: File, target: File) {
             target.parentFile?.mkdirs()
             if (source.renameTo(target)) return
-            source.inputStream().use { input -> target.outputStream().use { input.copyTo(it) } }
+            try {
+                source.inputStream().use { input -> target.outputStream().use { input.copyTo(it) } }
+            } catch (e: IOException) {
+                // Keine halbe Kopie liegen lassen; das Original ist noch da.
+                target.delete()
+                throw e
+            }
             if (!source.delete()) source.deleteOnExit()
             if (!target.isFile) throw IOException("Datei konnte nicht gespeichert werden: ${target.name}")
         }
@@ -97,7 +116,10 @@ class FileStore(private val context: Context) {
         /** Ein für jedes Dateisystem gültiger Dateiname mit der Endung [extension]. */
         fun safeFileName(name: String, extension: String): String {
             val cleaned = name.replace(Regex("""[\\/:*?"<>|\p{Cntrl}]"""), "_").trim().trim('.')
-            val base = cleaned.ifBlank { "Text" }.take(120)
+            // Dateisysteme begrenzen Namen auf 255 Bytes, nicht Zeichen: Umlaute, Emojis und
+            // chinesische Schrift brauchen mehrere Bytes je Zeichen.
+            var base = cleaned.ifBlank { "Text" }.takeWhole(120)
+            while (base.toByteArray(Charsets.UTF_8).size > MAX_NAME_BYTES) base = base.takeWhole(base.length - 1)
             return if (base.endsWith(".$extension", ignoreCase = true)) base else "$base.$extension"
         }
     }

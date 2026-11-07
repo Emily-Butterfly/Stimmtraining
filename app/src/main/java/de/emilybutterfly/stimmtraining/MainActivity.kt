@@ -1,5 +1,7 @@
 package de.emilybutterfly.stimmtraining
 
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -16,6 +18,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import de.emilybutterfly.stimmtraining.data.library.LibraryRepository
 import de.emilybutterfly.stimmtraining.ui.LocalAppSettings
 import de.emilybutterfly.stimmtraining.ui.backup.BackupScreen
 import de.emilybutterfly.stimmtraining.ui.detail.DetailScreen
@@ -34,6 +37,11 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Andere Apps können diese Activity starten und dabei Navigationsangaben mitgeben, aus
+        // denen eine Ansicht samt Argumenten würde (Deep-Link-Extras). Die App braucht keine:
+        // Sie startet immer wie über ihr Symbol. Auch nach einem Neustart durch Android, denn
+        // dann wird der ursprüngliche Start-Intent erneut geliefert.
+        intent = launcherIntent()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) {
             // Nur bei einem frischen Start: Dann kann kein wiederhergestellter Entwurf mehr
@@ -41,7 +49,16 @@ class MainActivity : ComponentActivity() {
             val container = (application as StimmtrainingApp).container
             container.appScope.launch(Dispatchers.IO) {
                 container.files.cleanOldDrafts()
+                container.backupManager.cleanStaleStaging()
                 runCatching { container.library.cleanOrphans() }
+                runCatching { container.repository.cleanOrphans() }
+                // Suchindex einmal neu aufbauen, wenn sich die Vereinheitlichung geändert hat.
+                if (container.settings.searchIndexVersion < LibraryRepository.SEARCH_VERSION) {
+                    runCatching {
+                        container.library.rebuildSearch()
+                        container.settings.searchIndexVersion = LibraryRepository.SEARCH_VERSION
+                    }
+                }
             }
         }
         enableEdgeToEdge()
@@ -54,7 +71,15 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        // Ebenso bei einem erneuten Start, während die App schon läuft.
+        super.onNewIntent(launcherIntent())
+    }
 }
+
+private fun Context.launcherIntent(): Intent =
+    Intent(this, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
 
 /**
  * Führt eine Navigation nur aus, solange [entry] die oberste Ansicht ist. So öffnet ein

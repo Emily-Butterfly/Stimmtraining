@@ -80,6 +80,10 @@ class LibraryTextViewModel(
         onMessage = { _message.value = it },
     )
 
+    /** Neu angelegt unter dieser ID: Die Ansicht schließt sich dann (als Zustand, siehe RecordUiState.savedId). */
+    private val _created = MutableStateFlow(savedState.get<Long>(KEY_CREATED))
+    val created: StateFlow<Long?> = _created.asStateFlow()
+
     private val _edit = MutableStateFlow(restoreEdit())
     val edit: StateFlow<LibraryEdit?> = _edit.asStateFlow()
 
@@ -151,7 +155,7 @@ class LibraryTextViewModel(
 
     fun cameraTarget() = container.files.prepareCameraCapture()
 
-    fun save(onCreated: (Long) -> Unit) {
+    fun save() {
         val edit = _edit.value ?: return
         if (edit.saving || editor.state.value.busy) return
         val state = editor.state.value
@@ -172,7 +176,8 @@ class LibraryTextViewModel(
                     if (shortened) _message.value = LibraryRepository.SHORTENED
                     editor.committed(state)
                     _edit.value = null
-                    onCreated(newId)
+                    savedState[KEY_CREATED] = newId
+                    _created.value = newId
                 } else {
                     if (state.change == AttachmentChange.Remove) {
                         _edit.update { it?.copy(saving = false) }
@@ -197,7 +202,21 @@ class LibraryTextViewModel(
 
     fun togglePinned() {
         val text = current ?: return
-        viewModelScope.launch { repository.setPinned(text.id, !text.pinned) }
+        safely("Das Anheften ist fehlgeschlagen") { repository.setPinned(text.id, !text.pinned) }
+    }
+
+    /**
+     * Führt eine Datenbankänderung im Hintergrund aus. Ein Fehler (z. B. Speicher voll) wird als
+     * Meldung gezeigt, statt die App zu beenden.
+     */
+    private fun safely(failure: String, block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                withContext(NonCancellable) { block() }
+            } catch (e: Exception) {
+                _message.value = "$failure: ${e.message}"
+            }
+        }
     }
 
     /** Setzt die gelesene Stelle von Hand; null beginnt den Text von vorne. */
@@ -214,7 +233,7 @@ class LibraryTextViewModel(
 
     fun readAgain() {
         val text = current ?: return
-        viewModelScope.launch { withContext(NonCancellable) { repository.readAgain(text.id) } }
+        safely("„Nochmal lesen“ ist fehlgeschlagen") { repository.readAgain(text.id) }
     }
 
     fun openExternally(document: TextAttachment.Document, onReady: (Intent) -> Unit) {
@@ -227,12 +246,10 @@ class LibraryTextViewModel(
         }
     }
 
-    fun delete(onDeleted: () -> Unit) {
+    /** Danach meldet [load] „gibt es nicht mehr“, und die Ansicht schließt sich. */
+    fun delete() {
         val text = current ?: return
-        viewModelScope.launch {
-            withContext(NonCancellable) { repository.delete(text.id) }
-            onDeleted()
-        }
+        safely("Das Löschen ist fehlgeschlagen") { repository.delete(text.id) }
     }
 
     fun messageShown() {
@@ -243,6 +260,7 @@ class LibraryTextViewModel(
 
     companion object {
         private const val KEY_EDITING = "libraryEditing"
+        private const val KEY_CREATED = "libraryCreated"
         private const val KEY_TITLE = "libraryTitle"
         private const val KEY_TAGS = "libraryTags"
         private const val KEY_TITLE_EDITED = "libraryTitleEdited"

@@ -140,6 +140,20 @@ class RecordingRepository(
         dao.updatePitch(id, result.mostFrequent, result.lowest, result.highest, result.voicedMs, System.currentTimeMillis())
     }
 
+    /**
+     * Räumt Fotos und Dateien weg, auf die keine Aufnahme mehr zeigt (z. B. weil die App zwischen
+     * Ablegen und Speichern beendet wurde). Nur ältere, damit nichts gerade Gespeichertes verschwindet.
+     * Audiodateien bleiben: Eine verlorene Aufnahme wäre schlimmer als ein paar MB.
+     */
+    suspend fun cleanOrphans() = withContext(Dispatchers.IO) {
+        val recordings = dao.getAll()
+        val photos = recordings.flatMap { it.photoPages }.toSet()
+        val documents = recordings.mapNotNull { it.documentFile }.toSet()
+        val cutoff = System.currentTimeMillis() - 60L * 60 * 1000
+        files.photoDir.listFiles()?.filter { it.isFile && it.name !in photos && it.lastModified() < cutoff }?.forEach { it.delete() }
+        files.documentDir.listFiles()?.filter { it.isFile && it.name !in documents && it.lastModified() < cutoff }?.forEach { it.delete() }
+    }
+
     suspend fun delete(recording: Recording) = withContext(Dispatchers.IO) {
         dao.delete(recording)
         files.audio(recording.audioFile).delete()

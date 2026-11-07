@@ -4,6 +4,7 @@ import de.emilybutterfly.stimmtraining.data.document.StyleNames.isHeading
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserException
 import java.io.File
+import java.io.IOException
 import java.util.zip.ZipFile
 
 /**
@@ -18,6 +19,9 @@ internal object OdtReader {
     private const val STYLE = "urn:oasis:names:tc:opendocument:xmlns:style:1.0"
     private const val FO = "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
 
+    /** Längere Vorlagennamen gibt es in echten Dokumenten nicht; sie bremsen nur. */
+    private const val MAX_NAME = 256
+
     private val SKIPPED_TEXT = setOf(
         "note", "tracked-changes", "sequence-decls", "variable-decls", "user-field-decls", "dde-connection-decls",
     )
@@ -31,6 +35,8 @@ internal object OdtReader {
                     readCommonStyles(ZipParts.parser(input), styles)
                 } catch (_: XmlPullParserException) {
                     // Ohne benannte Formatvorlagen geht es auch, nur ungenauer.
+                } catch (_: IOException) {
+                    // Ebenso, wenn styles.xml zu groß oder beschädigt ist: Der Text steht in content.xml.
                 }
             }
             val content = ZipParts.open(zip, "content.xml", maxBytes) ?: throw XmlPullParserException("content.xml fehlt")
@@ -59,11 +65,29 @@ internal object OdtReader {
             }
         }
 
-        fun bold(map: Map<String, Style>, name: String?): Boolean? = chain(map, name).firstNotNullOfOrNull { it.second?.bold }
-        fun italic(map: Map<String, Style>, name: String?): Boolean? = chain(map, name).firstNotNullOfOrNull { it.second?.italic }
+        // Je Vorlage nur einmal aufgelöst: Sonst liefe für jeden Absatz die ganze Kette.
+        private val boldCache = HashMap<Pair<Boolean, String>, Boolean?>()
+        private val italicCache = HashMap<Pair<Boolean, String>, Boolean?>()
+        private val blockCache = HashMap<String, BlockStyle?>()
 
-        fun blockStyle(name: String?): BlockStyle? = chain(paragraph, name).firstNotNullOfOrNull { (styleName, style) ->
-            StyleNames.blockStyle(styleName) ?: StyleNames.blockStyle(style?.displayName)
+        private fun <T> cached(cache: HashMap<Pair<Boolean, String>, T?>, map: Map<String, Style>, name: String?, compute: () -> T?): T? {
+            if (name == null) return null
+            val key = (map === paragraph) to name
+            return if (cache.containsKey(key)) cache[key] else compute().also { cache[key] = it }
+        }
+
+        fun bold(map: Map<String, Style>, name: String?): Boolean? =
+            cached(boldCache, map, name) { chain(map, name).firstNotNullOfOrNull { it.second?.bold } }
+
+        fun italic(map: Map<String, Style>, name: String?): Boolean? =
+            cached(italicCache, map, name) { chain(map, name).firstNotNullOfOrNull { it.second?.italic } }
+
+        fun blockStyle(name: String?): BlockStyle? {
+            if (name == null) return null
+            if (blockCache.containsKey(name)) return blockCache[name]
+            return chain(paragraph, name).firstNotNullOfOrNull { (styleName, style) ->
+                StyleNames.blockStyle(styleName) ?: StyleNames.blockStyle(style?.displayName)
+            }.also { blockCache[name] = it }
         }
     }
 
@@ -95,14 +119,17 @@ internal object OdtReader {
                 XmlPullParser.START_TAG -> if (parser.namespace == STYLE) {
                     when (parser.name) {
                         "style" -> {
-                            val name = parser.getAttributeValue(STYLE, "name")
+                            val name = parser.getAttributeValue(STYLE, "name")?.takeIf { it.length <= MAX_NAME }
                             val map = when (parser.getAttributeValue(STYLE, "family")) {
                                 "paragraph" -> styles.paragraph
                                 "text" -> styles.text
                                 else -> null
                             }
                             style = if (name != null && map != null) {
-                                Style(parser.getAttributeValue(STYLE, "parent-style-name"), parser.getAttributeValue(STYLE, "display-name"))
+                                Style(
+                                    parser.getAttributeValue(STYLE, "parent-style-name")?.takeIf { it.length <= MAX_NAME },
+                                    parser.getAttributeValue(STYLE, "display-name")?.takeIf { it.length <= MAX_NAME },
+                                )
                                     .also { map[name] = it }
                             } else {
                                 null
@@ -175,7 +202,7 @@ internal object OdtReader {
             when (name) {
                 "p", "h" -> startParagraph(name == "h")
                 "span" -> paragraph?.let {
-                    val styleName = parser.getAttributeValue(TEXT, "style-name")
+                    val styleName = parser.getAttributeValue(TEXT, "style-name")?.takeIf { name -> name.length <= MAX_NAME }
                     val (bold, italic) = it.formats.last()
                     it.formats.addLast(
                         (styles.bold(styles.text, styleName) ?: bold) to (styles.italic(styles.text, styleName) ?: italic),
@@ -207,7 +234,7 @@ internal object OdtReader {
         private fun startParagraph(heading: Boolean) {
             // Bisherigen Text des äußeren Absatzes (z. B. vor einem Textrahmen) abschließen.
             paragraphs.lastOrNull()?.let(::emit)
-            val styleName = parser.getAttributeValue(TEXT, "style-name")
+            val styleName = parser.getAttributeValue(TEXT, "style-name")?.takeIf { it.length <= MAX_NAME }
             val named = styles.blockStyle(styleName)
             val style = when {
                 heading -> StyleNames.heading(parser.getAttributeValue(TEXT, "outline-level")?.toIntOrNull() ?: 1)

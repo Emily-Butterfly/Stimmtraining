@@ -67,9 +67,9 @@ class LibraryFlowTest {
 
     private fun save(viewModel: RecordViewModel): Long {
         var saved: Long? = null
-        viewModel.save { saved = it }
-        waitFor { saved != null }
-        return saved!!
+        viewModel.save()
+        waitFor { viewModel.state.value.savedId != null }
+        return viewModel.state.value.savedId!!
     }
 
     private fun addStory(): Long = runBlocking {
@@ -258,10 +258,9 @@ class LibraryFlowTest {
         val (take, _) = finishedTake(id)
         // Eine Seite fehlt plötzlich (z. B. nach einem unvollständigen Backup).
         runBlocking { library.attachmentOf(library.get(id)!!)!!.files.first().delete() }
-        var saved: Long? = null
-        take.save { saved = it }
+        take.save()
         waitFor { !take.state.value.saving }
-        assertNull("nicht gespeichert", saved)
+        assertNull("nicht gespeichert", take.state.value.savedId)
         assertTrue(take.state.value.message!!.contains("Abschnitt"))
         assertNotNull("Aufnahme liegt noch vor", take.state.value.audio)
         assertNull("Fortschritt unverändert", runBlocking { library.get(id)!!.progress })

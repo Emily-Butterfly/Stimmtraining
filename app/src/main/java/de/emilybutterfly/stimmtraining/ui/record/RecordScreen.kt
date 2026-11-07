@@ -81,6 +81,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -172,6 +173,12 @@ fun RecordScreen(
         if (granted) viewModel.startRecording() else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
+    // Gespeichert: zur Aufnahme wechseln – mit dem Rückruf dieser Ansicht, nicht einem von vor dem Drehen.
+    val currentOnSaved by rememberUpdatedState(onSaved)
+    LaunchedEffect(state.savedId) {
+        state.savedId?.let { currentOnSaved(it) }
+    }
+
     // Nach dem Stoppen soll die Frage „Wie weit hast du gelesen?“ zu sehen sein, nicht irgendwo weiter unten.
     LaunchedEffect(state.phase == RecorderPhase.Done, library != null) {
         if (state.phase == RecorderPhase.Done && library != null) formScroll.animateScrollTo(0)
@@ -250,7 +257,7 @@ fun RecordScreen(
                 onPauseResume = viewModel::pauseOrResume,
                 onStop = viewModel::stopRecording,
                 onRetake = { confirmRetake = true },
-                onSave = { viewModel.save(onSaved) },
+                onSave = viewModel::save,
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },

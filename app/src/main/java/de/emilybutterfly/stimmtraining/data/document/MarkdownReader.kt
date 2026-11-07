@@ -1,5 +1,7 @@
 package de.emilybutterfly.stimmtraining.data.document
 
+import de.emilybutterfly.stimmtraining.data.takeWhole
+
 /**
  * Markdown, bewusst einfach und fehlertolerant: Überschriften, Listen, Zitate, Codeblöcke,
  * fett und kursiv. Zeilenumbrüche innerhalb eines Absatzes bleiben – anders als in HTML-
@@ -227,6 +229,9 @@ private object MarkdownInline {
     /** Bei mehr Begrenzern bleibt alles wörtlich – schützt vor quadratischer Laufzeit. */
     private const val MAX_DELIMITERS = 2_000
     private const val MAX_LINK_LENGTH = 2_000
+
+    /** Soviel darf die Suche nach Link-Klammern je Absatz insgesamt kosten. */
+    private const val LINK_BUDGET = 2_000_000
     private const val MAX_NESTING = 4
 
     /** Längere Autolinks und Tags bleiben Text; so durchsucht nicht jedes '<' den ganzen Absatz. */
@@ -259,7 +264,11 @@ private object MarkdownInline {
     /** [split] beendet den Absatz, wenn er an einem Zeilenumbruch schon zu lang ist. */
     fun emit(source: String, builder: TextDocumentBuilder, split: () -> Unit) {
         val tokens = ArrayList<Any>()
-        tokenize(source, tokens, 0)
+        // Was ohnehin nicht mehr aufgenommen wird, gar nicht erst zerlegen (Auszeichnung kostet
+        // höchstens ein paar Zeichen, daher mit Spielraum).
+        val limit = builder.remaining.toLong() * 2 + 4_096
+        val text = if (source.length > limit) source.takeWhole(limit.toInt()) else source
+        tokenize(text, tokens, 0, LinkBudget())
         val bold = IntArray(tokens.size + 1)
         val italic = IntArray(tokens.size + 1)
         matchEmphasis(tokens, bold, italic)
@@ -288,7 +297,10 @@ private object MarkdownInline {
         }
     }
 
-    private fun tokenize(s: String, out: MutableList<Any>, nesting: Int) {
+    /** Rechenbudget für die Suche nach passenden Klammern: Viele '[' ohne Gegenstück blieben sonst quadratisch. */
+    private class LinkBudget(var steps: Int = LINK_BUDGET)
+
+    private fun tokenize(s: String, out: MutableList<Any>, nesting: Int, budget: LinkBudget) {
         val scan = Scan()
         val text = StringBuilder()
         fun flush() {
@@ -325,13 +337,13 @@ private object MarkdownInline {
                 }
                 (c == '[' || c == '!' && next == '[') && nesting < MAX_NESTING -> {
                     val start = if (c == '!') i + 1 else i
-                    val link = link(s, start)
+                    val link = link(s, start, budget)
                     if (link == null) {
                         text.append(c)
                         i++
                     } else {
                         flush()
-                        tokenize(link.first, out, nesting + 1)
+                        tokenize(link.first, out, nesting + 1, budget)
                         i = link.second
                     }
                 }
@@ -468,21 +480,22 @@ private object MarkdownInline {
     }
 
     /** `[Text](Ziel)` oder `[Text][Verweis]` ab [start] ('['): Linktext und Position dahinter. */
-    private fun link(s: String, start: Int): Pair<String, Int>? {
-        val close = matching(s, start, '[', ']') ?: return null
+    private fun link(s: String, start: Int, budget: LinkBudget): Pair<String, Int>? {
+        val close = matching(s, start, '[', ']', budget) ?: return null
         val end = when (s.getOrNull(close + 1)) {
-            '(' -> matching(s, close + 1, '(', ')')
-            '[' -> matching(s, close + 1, '[', ']')
+            '(' -> matching(s, close + 1, '(', ')', budget)
+            '[' -> matching(s, close + 1, '[', ']', budget)
             else -> null
         } ?: return null
         return s.substring(start + 1, close) to end + 1
     }
 
-    private fun matching(s: String, start: Int, open: Char, close: Char): Int? {
+    private fun matching(s: String, start: Int, open: Char, close: Char, budget: LinkBudget): Int? {
         var depth = 0
         var i = start
         val limit = minOf(s.length, start + MAX_LINK_LENGTH)
         while (i < limit) {
+            if (--budget.steps < 0) return null
             when (s[i]) {
                 '\\' -> i++
                 open -> depth++

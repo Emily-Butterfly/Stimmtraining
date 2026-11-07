@@ -21,8 +21,14 @@ class AppSettings(context: Context) {
         _gentleMode.value = enabled
     }
 
+    /** Mit welcher Version der Suchindex der Bibliothek aufgebaut ist (siehe LibraryRepository.SEARCH_VERSION). */
+    var searchIndexVersion: Int
+        get() = prefs.getInt(KEY_SEARCH_VERSION, 1)
+        set(value) = prefs.edit().putInt(KEY_SEARCH_VERSION, value).apply()
+
     private companion object {
         const val PREFS = "settings"
         const val KEY_GENTLE = "gentleMode"
+        const val KEY_SEARCH_VERSION = "searchIndexVersion"
     }
 }

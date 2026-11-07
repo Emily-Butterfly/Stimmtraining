@@ -18,6 +18,9 @@ object ImageImporter {
     private const val MAX_SIDE = 2560
     private const val QUALITY = 88
 
+    /** So viele Pixel werden höchstens auf einmal dekodiert (etwa 48 MB); größere Bilder vorher verkleinert. */
+    private const val MAX_DECODE_PIXELS = 12_000_000L
+
     fun import(resolver: ContentResolver, source: Uri, target: File) {
         // Mit inJustDecodeBounds liefert decodeStream immer null; nur die Maße werden gefüllt.
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -26,10 +29,13 @@ object ImageImporter {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw IOException("Datei ist kein lesbares Bild")
 
         var sampleSize = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= MAX_SIDE) sampleSize *= 2
-        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-        val decoded = resolver.openInputStream(source)?.use { BitmapFactory.decodeStream(it, null, options) }
-            ?: throw IOException("Bild konnte nicht gelesen werden")
+        while (
+            max(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= MAX_SIDE ||
+            (bounds.outWidth.toLong() / sampleSize) * (bounds.outHeight.toLong() / sampleSize) > MAX_DECODE_PIXELS
+        ) {
+            sampleSize *= 2
+        }
+        val decoded = decode(resolver, source, sampleSize)
 
         val orientation = try {
             resolver.openInputStream(source)?.use {
@@ -62,6 +68,23 @@ object ImageImporter {
         }
 
         writeTransformed(decoded, matrix, target)
+    }
+
+    /**
+     * Dekodiert mit [sampleSize]; reicht der Arbeitsspeicher nicht, einmal kleiner. Ein
+     * OutOfMemoryError darf nicht nach außen dringen, er würde die App beenden.
+     */
+    private fun decode(resolver: ContentResolver, source: Uri, sampleSize: Int): Bitmap {
+        for (sample in listOf(sampleSize, sampleSize * 2)) {
+            try {
+                val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                return resolver.openInputStream(source)?.use { BitmapFactory.decodeStream(it, null, options) }
+                    ?: throw IOException("Bild konnte nicht gelesen werden")
+            } catch (_: OutOfMemoryError) {
+                // noch einmal mit halber Kantenlänge
+            }
+        }
+        throw IOException("Das Bild ist zu groß für den Arbeitsspeicher")
     }
 
     /**

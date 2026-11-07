@@ -216,7 +216,7 @@ class AttachmentEditor(
     }
 
     private fun restore(): State {
-        val drafts = savedState.get<String>(KEY_DRAFTS).pageNames().map(::File).filter { it.isFile }
+        val drafts = savedState.get<String>(KEY_DRAFTS).pageNames().mapNotNull(files::ownDraft)
         val name = savedState.get<String>(KEY_NAME)
         val change = when (savedState.get<String>(KEY_MODE)) {
             "remove" -> AttachmentChange.Remove

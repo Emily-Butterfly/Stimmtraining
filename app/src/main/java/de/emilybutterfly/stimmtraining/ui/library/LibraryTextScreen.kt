@@ -59,6 +59,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -109,6 +110,17 @@ fun LibraryTextScreen(
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     var markingPosition by rememberSaveable { mutableStateOf(false) }
 
+    // Neu angelegt: zurück zur Liste – mit dem Rückruf dieser Ansicht, auch nach dem Drehen.
+    val created by viewModel.created.collectAsStateWithLifecycle()
+    val currentOnClose by rememberUpdatedState(onClose)
+    LaunchedEffect(created) {
+        if (created != null) currentOnClose()
+    }
+    // Gelöscht (hier oder anderswo): Es gibt nichts mehr zu zeigen.
+    LaunchedEffect(load) {
+        if (load is LibraryLoad.Missing) currentOnClose()
+    }
+
     LaunchedEffect(message) {
         message?.let {
             snackbar.showSnackbar(it, duration = if (it.length > 80) SnackbarDuration.Long else SnackbarDuration.Short)
@@ -154,7 +166,7 @@ fun LibraryTextScreen(
                 },
                 actions = {
                     if (editing != null) {
-                        IconButton(onClick = { viewModel.save { onClose() } }, enabled = !editing.saving && !editorState.busy) {
+                        IconButton(onClick = { viewModel.save() }, enabled = !editing.saving && !editorState.busy) {
                             Icon(Icons.Filled.Check, contentDescription = "Speichern")
                         }
                     } else if (text != null) {
@@ -208,7 +220,7 @@ fun LibraryTextScreen(
                 )
                 TagEditor(tags = editing.tags, known = knownTags, onAdd = viewModel::addTag, onRemove = viewModel::removeTag)
                 Button(
-                    onClick = { viewModel.save { onClose() } },
+                    onClick = { viewModel.save() },
                     enabled = !editing.saving && !editorState.busy,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(if (viewModel.isNew) "In die Bibliothek legen" else "Änderungen speichern") }
@@ -292,7 +304,7 @@ fun LibraryTextScreen(
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
-                    viewModel.delete(onDeleted = onClose)
+                    viewModel.delete()
                 }) { Text("Löschen") }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
