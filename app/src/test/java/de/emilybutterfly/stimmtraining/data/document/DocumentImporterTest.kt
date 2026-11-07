@@ -87,7 +87,8 @@ class DocumentImporterTest {
         val intent = files.viewIntent(document.file, document.name, document.kind.mimeType)
         assertEquals(android.content.Intent.ACTION_VIEW, intent.action)
         assertEquals("text/markdown", intent.type)
-        assertTrue(intent.data.toString(), intent.data.toString().endsWith("/open/Nordwind%20und%20Sonne.md"))
+        // Jede Kopie liegt in einem eigenen Unterordner, damit keine App eine frühere unter derselben Adresse verliert.
+        assertTrue(intent.data.toString(), Regex(".*/open/[0-9a-f-]{36}/Nordwind%20und%20Sonne\\.md").matches(intent.data.toString()))
         assertTrue(intent.flags and android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
     }
 
